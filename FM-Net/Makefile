@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -O2
-SRC = fm-net.c
+CFLAGS = -Wall -O2
+SRC = main.c fm-net.c
 LDFLAGS = -lm
 
 default:
@@ -8,4 +8,4 @@ default:
 
 .PHONY: clean
 clean:
-	rm -rfv test
+	rm -rfv test $(SRC:.c=.o)
