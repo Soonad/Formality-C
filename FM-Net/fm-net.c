@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define u32 uint32_t 
-#define u64 uint64_t 
+#define u32 uint32_t
+#define u64 uint64_t
 
 const u32 PTR = 0;
 const u32 NUM = 1;
@@ -119,7 +119,7 @@ u32 get_kind(Net* net, u32 addr) {
 
 // Given a pointer to a port, returns a pointer to the opposing port
 u64 enter_port(Net* net, u64 ptrn) {
-  if (type_of(ptrn) == NUM) { 
+  if (type_of(ptrn) == NUM) {
     printf("[ERROR]\nCan't enter a numeric pointer.");
     return 0;
   } else {
@@ -196,14 +196,14 @@ void rewrite(Net* net, u32 a_addr) {
       unlink_port(net, Pointer(a_addr, 0));
       unlink_port(net, Pointer(a_addr, 2));
       free_node(net, a_addr);
-    
+
     // BinaryOperation
     } else if (a_type == OP2) {
       set_type(net, a_addr, OP1);
       link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(a_addr, 1)));
       unlink_port(net, Pointer(a_addr, 1));
       link_ports(net, Pointer(a_addr, 1), b_ptrn);
-  
+
     // NumberDuplication
     } else if (a_type == NOD) {
       link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
@@ -258,50 +258,33 @@ void rewrite(Net* net, u32 a_addr) {
       (  (a_type == NOD && b_type == NOD && a_kind != b_kind)
       || (a_type == NOD && b_type == OP2)
       || (a_type == NOD && b_type == ITE)) {
+
       u32 p_addr = alloc_node(net, b_type, b_kind);
-      u32 q_addr = alloc_node(net, b_type, b_kind);
-      u32 r_addr = alloc_node(net, a_type, a_kind);
-      u32 s_addr = alloc_node(net, a_type, a_kind);
-      link_ports(net, Pointer(r_addr, 1), Pointer(p_addr, 1));
-      link_ports(net, Pointer(s_addr, 1), Pointer(p_addr, 2));
-      link_ports(net, Pointer(r_addr, 2), Pointer(q_addr, 1));
-      link_ports(net, Pointer(s_addr, 2), Pointer(q_addr, 2));
-      link_ports(net, Pointer(p_addr, 0), enter_port(net, Pointer(a_addr, 1)));
-      link_ports(net, Pointer(q_addr, 0), enter_port(net, Pointer(a_addr, 2)));
-      link_ports(net, Pointer(r_addr, 0), enter_port(net, Pointer(b_addr, 1)));
-      link_ports(net, Pointer(s_addr, 0), enter_port(net, Pointer(b_addr, 2)));
-      for (u32 i = 0; i < 3; i++) {
-        unlink_port(net, Pointer(a_addr, i));
-        unlink_port(net, Pointer(b_addr, i));
-      }
-      free_node(net, a_addr);
-      if (a_addr != b_addr) {
-        free_node(net, b_addr);
-      }
+      u32 q_addr = alloc_node(net, a_type, a_kind);
+      
+      link_ports(net, Pointer(b_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+      link_ports(net, Pointer(p_addr, 0), enter_port(net, Pointer(a_addr, 2)));
+      link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(b_addr, 1)));
+      link_ports(net, Pointer(q_addr, 0), enter_port(net, Pointer(b_addr, 2)));
+      link_ports(net, Pointer(a_addr, 1), Pointer(b_addr, 1));
+      link_ports(net, Pointer(q_addr, 1), Pointer(b_addr, 2));
+      link_ports(net, Pointer(a_addr, 2), Pointer(p_addr, 1));
+      link_ports(net, Pointer(q_addr, 2), Pointer(p_addr, 2));
 
     // UnaryDuplication
     } else if
       (  (a_type == NOD && b_type == OP1)
       || (a_type == ITE && b_type == OP1)) {
-      u32 p_addr = alloc_node(net, b_type, b_kind);
-      u32 q_addr = alloc_node(net, b_type, b_kind);
-      u32 s_addr = alloc_node(net, a_type, a_kind);
-      link_ports(net, Pointer(p_addr, 1), enter_port(net, Pointer(b_addr, 1)));
-      link_ports(net, Pointer(q_addr, 1), enter_port(net, Pointer(b_addr, 1)));
-      link_ports(net, Pointer(s_addr, 1), Pointer(p_addr, 2));
-      link_ports(net, Pointer(s_addr, 2), Pointer(q_addr, 2));
-      link_ports(net, Pointer(p_addr, 0), enter_port(net, Pointer(a_addr, 1)));
-      link_ports(net, Pointer(q_addr, 0), enter_port(net, Pointer(a_addr, 2)));
-      link_ports(net, Pointer(s_addr, 0), enter_port(net, Pointer(b_addr, 2)));
-      for (u32 i = 0; i < 3; i++) {
-        unlink_port(net, Pointer(a_addr, i));
-        unlink_port(net, Pointer(b_addr, i));
-      }
-      free_node(net, a_addr);
-      if (a_addr != b_addr) {
-        free_node(net, b_addr);
-      }
-    
+
+      u32 c_addr = alloc_node(net, b_type, b_kind);
+
+      link_ports(net, Pointer(b_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+      link_ports(net, Pointer(c_addr, 0), enter_port(net, Pointer(a_addr, 2)));
+      link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(b_addr, 2)));
+      link_ports(net, Pointer(c_addr, 1), enter_port(net, Pointer(b_addr, 1)));
+      link_ports(net, Pointer(a_addr, 1), Pointer(b_addr, 2));
+      link_ports(net, Pointer(a_addr, 2), Pointer(c_addr, 2));
+
     // Permutations
     } else if (a_type == OP1 && b_type == NOD) {
       return rewrite(net, b_addr);
