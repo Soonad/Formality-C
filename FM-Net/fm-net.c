@@ -146,7 +146,6 @@ inline void swap(u32* value1, u32* value2) {
 void rewrite(Net* net, u32 a_addr) {
   u64 b_ptrn = get_port(net, a_addr, 0);
 
-
   if (type_of(b_ptrn) == PTR) {
     u32 b_addr = addr_of(b_ptrn);
     u32 a_type = get_type(net, a_addr);
@@ -156,77 +155,8 @@ void rewrite(Net* net, u32 a_addr) {
     if (b_type == NOD && (a_type == OP1 || a_type == OP2 || a_type == ITE)) {
       swap(&a_addr, &b_addr);
       swap(&a_type, &b_type);
-      b_ptrn = get_port(net, a_addr, 0);
-    }
-  }
-
-  if (type_of(b_ptrn) == NUM) {
-    u32 a_type = get_type(net, a_addr);
-    u32 a_kind = get_kind(net, a_addr);
-
-    // UnaryOperation
-    if (a_type == OP1) {
-      u64 dst = enter_port(net, Pointer(a_addr, 2));
-      u32 fst = numb_of(b_ptrn);
-      u32 snd = numb_of(enter_port(net, Pointer(a_addr, 1)));
-      u64 res;
-      switch (a_kind) {
-        case  0: res = Numeric(fst + snd); break;
-        case  1: res = Numeric(fst - snd); break;
-        case  2: res = Numeric(fst * snd); break;
-        case  3: res = Numeric(fst / snd); break;
-        case  4: res = Numeric(fst % snd); break;
-        case  5: res = Numeric((u32)(pow((float)fst, (float)snd))); break;
-        case  6: res = Numeric((u32)(pow((float)fst, ((float)snd / pow(2.0,32.0))))); break;
-        case  7: res = Numeric(fst & snd); break;
-        case  8: res = Numeric(fst | snd); break;
-        case  9: res = Numeric(fst ^ snd); break;
-        case 10: res = Numeric(~snd); break;
-        case 11: res = Numeric(fst >> snd); break;
-        case 12: res = Numeric(fst << snd); break;
-        case 13: res = Numeric(fst > snd ? 1 : 0); break;
-        case 14: res = Numeric(fst < snd ? 1 : 0); break;
-        case 15: res = Numeric(fst == snd ? 1 : 0); break;
-        default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
-      }
-      link_ports(net, dst, res);
-      unlink_port(net, Pointer(a_addr, 0));
-      unlink_port(net, Pointer(a_addr, 2));
-      free_node(net, a_addr);
-
-    // BinaryOperation
-    } else if (a_type == OP2) {
-      set_type(net, a_addr, OP1);
-      link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(a_addr, 1)));
-      unlink_port(net, Pointer(a_addr, 1));
-      link_ports(net, Pointer(a_addr, 1), b_ptrn);
-
-    // NumberDuplication
-    } else if (a_type == NOD) {
-      link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
-      link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 2)));
-      free_node(net, a_addr);
-
-    // IfThenElse
-    } else if (a_type == ITE) {
-      u32 cond_val = numb_of(b_ptrn) == 0;
-      u64 pair_ptr = enter_port(net, Pointer(a_addr, 1));
-      set_type(net, a_addr, NOD);
-      link_ports(net, Pointer(a_addr, 0), pair_ptr);
-      unlink_port(net, Pointer(a_addr, 1));
-      u64 dest_ptr = enter_port(net, Pointer(a_addr, 2));
-      link_ports(net, Pointer(a_addr, cond_val ? 2 : 1), dest_ptr);
-        if (!cond_val) unlink_port(net, Pointer(a_addr, 2));
-      link_ports(net, Pointer(a_addr, cond_val ? 1 : 2), Pointer(a_addr, cond_val ? 1 : 2));
-
-    } else {
-      printf("[ERROR]\nInvalid interaction.");
     }
 
-  } else {
-    u32 b_addr = addr_of(b_ptrn);
-    u32 a_type = get_type(net, a_addr);
-    u32 b_type = get_type(net, b_addr);
     u32 a_kind = get_kind(net, a_addr);
     u32 b_kind = get_kind(net, b_addr);
 
@@ -286,6 +216,69 @@ void rewrite(Net* net, u32 a_addr) {
     } else {
       printf("[ERROR]\nInvalid interaction.");
     }
+
+  } else {
+     u32 a_type = get_type(net, a_addr);
+     u32 a_kind = get_kind(net, a_addr);
+
+     // UnaryOperation
+     if (a_type == OP1) {
+       u64 dst = enter_port(net, Pointer(a_addr, 2));
+       u32 fst = numb_of(b_ptrn);
+       u32 snd = numb_of(enter_port(net, Pointer(a_addr, 1)));
+       u64 res;
+       switch (a_kind) {
+         case  0: res = Numeric(fst + snd); break;
+         case  1: res = Numeric(fst - snd); break;
+         case  2: res = Numeric(fst * snd); break;
+         case  3: res = Numeric(fst / snd); break;
+         case  4: res = Numeric(fst % snd); break;
+         case  5: res = Numeric((u32)(pow((float)fst, (float)snd))); break;
+         case  6: res = Numeric((u32)(pow((float)fst, ((float)snd / pow(2.0,32.0))))); break;
+         case  7: res = Numeric(fst & snd); break;
+         case  8: res = Numeric(fst | snd); break;
+         case  9: res = Numeric(fst ^ snd); break;
+         case 10: res = Numeric(~snd); break;
+         case 11: res = Numeric(fst >> snd); break;
+         case 12: res = Numeric(fst << snd); break;
+         case 13: res = Numeric(fst > snd ? 1 : 0); break;
+         case 14: res = Numeric(fst < snd ? 1 : 0); break;
+         case 15: res = Numeric(fst == snd ? 1 : 0); break;
+         default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
+       }
+       link_ports(net, dst, res);
+       unlink_port(net, Pointer(a_addr, 0));
+       unlink_port(net, Pointer(a_addr, 2));
+       free_node(net, a_addr);
+
+     // BinaryOperation
+     } else if (a_type == OP2) {
+       set_type(net, a_addr, OP1);
+       link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+       unlink_port(net, Pointer(a_addr, 1));
+       link_ports(net, Pointer(a_addr, 1), b_ptrn);
+
+     // NumberDuplication
+     } else if (a_type == NOD) {
+       link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
+       link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 2)));
+       free_node(net, a_addr);
+
+     // IfThenElse
+     } else if (a_type == ITE) {
+       u32 cond_val = numb_of(b_ptrn) == 0;
+       u64 pair_ptr = enter_port(net, Pointer(a_addr, 1));
+       set_type(net, a_addr, NOD);
+       link_ports(net, Pointer(a_addr, 0), pair_ptr);
+       unlink_port(net, Pointer(a_addr, 1));
+       u64 dest_ptr = enter_port(net, Pointer(a_addr, 2));
+       link_ports(net, Pointer(a_addr, cond_val ? 2 : 1), dest_ptr);
+         if (!cond_val) unlink_port(net, Pointer(a_addr, 2));
+       link_ports(net, Pointer(a_addr, cond_val ? 1 : 2), Pointer(a_addr, cond_val ? 1 : 2));
+
+     } else {
+       printf("[ERROR]\nInvalid interaction.");
+     }
   }
 }
 
