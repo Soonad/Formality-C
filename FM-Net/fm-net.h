@@ -72,4 +72,4 @@ Stats reduce(Net *net);
 void print_pointer(u64 ptrn);
 void print_net(Net* net);
 
-#endif
+#endif // #ifndef __FM_NET_H__

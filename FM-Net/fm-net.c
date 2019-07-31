@@ -1,38 +1,38 @@
 #include "fm-net.h"
 
-static const u32 PTR = 0;
-static const u32 NUM = 1;
+const u32 PTR = 0;
+const u32 NUM = 1;
 
-static const u32 NOD = 0;
-static const u32 OP1 = 1;
-static const u32 OP2 = 2;
-static const u32 ITE = 3;
+const u32 NOD = 0;
+const u32 OP1 = 1;
+const u32 OP2 = 2;
+const u32 ITE = 3;
 
-u64 Pointer(u32 addr, u32 port) {
+inline u64 Pointer(u32 addr, u32 port) {
   return (u64)((addr << 2) + (port & 3));
 }
 
-u32 addr_of(u64 ptrn) {
+inline u32 addr_of(u64 ptrn) {
   return (u32)(ptrn >> 2);
 }
 
-u32 slot_of(u64 ptrn) {
+inline u32 slot_of(u64 ptrn) {
   return (u32)(ptrn & 3);
 }
 
-u64 Numeric(u32 numb) {
-  return (u64)numb | (u64)0x100000000;
+inline u64 Numeric(u32 numb) {
+  return ((u64)numb | (u64)0x100000000);
 }
 
-u32 numb_of(u64 ptrn) {
+inline u32 numb_of(u64 ptrn) {
   return (u32)ptrn;
 }
 
-u32 type_of(u64 ptrn) {
-  return ptrn >= (u64)0x100000000 ? NUM : PTR;
+inline u32 type_of(u64 ptrn) {
+  return (ptrn >= (u64)0x100000000 ? NUM : PTR);
 }
 
-u32 alloc_node(Net *net, u32 type, u32 kind) {
+inline u32 alloc_node(Net *net, u32 type, u32 kind) {
   u32 addr;
   if (net->freed_len > 0) {
     addr = net->freed[--net->freed_len];
@@ -47,7 +47,7 @@ u32 alloc_node(Net *net, u32 type, u32 kind) {
   return addr;
 }
 
-void free_node(Net *net, u32 addr) {
+inline void free_node(Net *net, u32 addr) {
   net->nodes[addr * 4 + 0] = addr * 4 + 0;
   net->nodes[addr * 4 + 1] = addr * 4 + 1;
   net->nodes[addr * 4 + 2] = addr * 4 + 2;
@@ -55,18 +55,18 @@ void free_node(Net *net, u32 addr) {
   net->freed[net->freed_len++] = addr;
 }
 
-u32 is_free(Net *net, u32 addr) {
+inline u32 is_free(Net *net, u32 addr) {
   return net->nodes[addr * 4 + 0] == addr * 4 + 0
       && net->nodes[addr * 4 + 1] == addr * 4 + 1
       && net->nodes[addr * 4 + 2] == addr * 4 + 2
       && net->nodes[addr * 4 + 3] == 0;
 }
 
-u32 is_numeric(Net *net, u32 addr, u32 slot) {
+inline u32 is_numeric(Net *net, u32 addr, u32 slot) {
   return (net->nodes[addr * 4 + 3] >> slot) & 1;
 }
 
-void set_port(Net *net, u32 addr, u32 slot, u64 ptrn) {
+inline void set_port(Net *net, u32 addr, u32 slot, u64 ptrn) {
   if (type_of(ptrn) == NUM) {
       net->nodes[addr * 4 + slot] = numb_of(ptrn);
       net->nodes[addr * 4 + 3]    = net->nodes[addr * 4 + 3] | (1 << slot);
@@ -76,19 +76,19 @@ void set_port(Net *net, u32 addr, u32 slot, u64 ptrn) {
   }
 }
 
-u64 get_port(Net* net, u32 addr, u32 slot) {
+inline u64 get_port(Net* net, u32 addr, u32 slot) {
   return (u64)net->nodes[addr * 4 + slot] + (is_numeric(net, addr, slot) ? (u64)0x100000000 : (u64)0);
 }
 
-void set_type(Net* net, u32 addr, u32 type) {
+inline void set_type(Net* net, u32 addr, u32 type) {
   net->nodes[addr * 4 + 3] = (net->nodes[addr * 4 + 3] & ~0b111000) | (type << 3);
 }
 
-u32 get_type(Net* net, u32 addr) {
+inline u32 get_type(Net* net, u32 addr) {
   return (net->nodes[addr * 4 + 3] >> 3) & 0x7;
 }
 
-u32 get_kind(Net* net, u32 addr) {
+inline u32 get_kind(Net* net, u32 addr) {
   return net->nodes[addr * 4 + 3] >> 6;
 }
 
@@ -134,9 +134,31 @@ void unlink_port(Net* net, u64 a_ptrn) {
   }
 }
 
+inline void swap(u32* value1, u32* value2) {
+  if (value1 != value2) {
+    u32 temp = *value1;
+    *value1 = *value2;
+    *value2 = temp;
+  }
+}
+
 // Rewrites an active pair
 void rewrite(Net* net, u32 a_addr) {
   u64 b_ptrn = get_port(net, a_addr, 0);
+
+
+  if (type_of(b_ptrn) == PTR) {
+    u32 b_addr = addr_of(b_ptrn);
+    u32 a_type = get_type(net, a_addr);
+    u32 b_type = get_type(net, b_addr);
+
+    // Permutations
+    if (b_type == NOD && (a_type == OP1 || a_type == OP2 || a_type == ITE)) {
+      swap(&a_addr, &b_addr);
+      swap(&a_type, &b_type);
+      b_ptrn = get_port(net, a_addr, 0);
+    }
+  }
 
   if (type_of(b_ptrn) == NUM) {
     u32 a_type = get_type(net, a_addr);
@@ -259,14 +281,6 @@ void rewrite(Net* net, u32 a_addr) {
       link_ports(net, Pointer(c_addr, 1), enter_port(net, Pointer(b_addr, 1)));
       link_ports(net, Pointer(a_addr, 1), Pointer(b_addr, 2));
       link_ports(net, Pointer(a_addr, 2), Pointer(c_addr, 2));
-
-    // Permutations
-    } else if (a_type == OP1 && b_type == NOD) {
-      return rewrite(net, b_addr);
-    } else if (a_type == OP2 && b_type == NOD) {
-      return rewrite(net, b_addr);
-    } else if (a_type == ITE && b_type == NOD) {
-      return rewrite(net, b_addr);
 
     // InvalidInteraction
     } else {
