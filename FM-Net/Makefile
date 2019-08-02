@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -O2
+CFLAGS = -Wall -O3
 SRC = main.c fm-net.c
 LDFLAGS = -lm
 
