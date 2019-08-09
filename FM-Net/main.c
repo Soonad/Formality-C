@@ -28,4 +28,8 @@ int main () {
   // Must output 44067986
   printf("rewrites: %d\n", stats.rewrites);
   printf("loops: %d\n", stats.loops);
+
+  free(net.nodes);
+  free(net.redex);
+  free(net.freed);
 }
