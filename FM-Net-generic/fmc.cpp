@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include <cstring>
+
 #define u32 uint32_t
 #define u64 uint64_t
 
@@ -32,440 +34,396 @@ constexpr unsigned num_of_bits_required(unsigned x)
 
 constexpr unsigned num_of_bits_4_node_typ = num_of_bits_required(ITE + 1);
 
-struct config_u32array {
-  typedef u64 PortPtrTy;
-  typedef u32 NodePtrTy;
-  typedef u32 StorageTy;
-  typedef u64 ValTy;
-  typedef u32 KindTy;
+template<typename PortPtrTy, typename NumTy> union PortTy {
+  PortPtrTy targetPtr;
+  NumTy targetNum;
+};
 
-  static constexpr ValTy num_magic = 0x1'00'00'00'00;
+// clang doesn't like casts in constexprs, hence temporarily this:
+#define CONSTEXPR
 
-  // typedef NodePtrTy NetTy[];
+// This uses ***different*** represenation, ports are addressed by int offset (in storage units)
+// from the current port pointer
+// `nodes` array **shall* be aligned on (sizeof(StorageTy)*4)-bytes boundary, i.e we may compute port number from the
+// pointer value
+struct config_i32array {
+  static constexpr int nsz = sizeof(int);
+  typedef int StorageTy;
+  typedef StorageTy NumTy;
+  typedef StorageTy OffTy;
+
+  static constexpr int node_size = INFO + 1;
+
   struct NetTy {
-    StorageTy *nodes;
-    u32 nodes_len;
-    NodePtrTy *redex;
-    u32 redex_len;
-    NodePtrTy *freed;
-    u32 freed_len;
-  } Net;
+    StorageTy * nodes;
+    u32 nodes_len; // FIXME??? Overflow???
+    StorageTy * * redex;
+    u32 redex_len; // FIXME??? Overflow???
+    StorageTy * * freed;
+    u32 freed_len; // FIXME??? Overflow???
+  };
+
+  NetTy net;
 
   static constexpr unsigned num_of_bits_4_label = sizeof(StorageTy) * 8 - num_of_bits_4_node_typ - INFO;
 
+  // bitfields seems to be low-endianish
   struct info {
-    KindTy kind : num_of_bits_4_label;
-    node_typ type : num_of_bits_4_node_typ;
     unsigned is_num : INFO;
+    node_typ type : num_of_bits_4_node_typ;
+    StorageTy kind : num_of_bits_4_label;
   };
 
   static_assert(sizeof(info) == sizeof(StorageTy), "info size should be of regular storage size!");
 
+#define as_info(p) reinterpret_cast<info*>(p)
+#define as_cinfo(p) reinterpret_cast<const info*>(p)
+
+  template <port_num slot>
   static
-  const info & as_info(const StorageTy & v){
-    return *reinterpret_cast<const info *>(&v);
+  void clean_port(StorageTy* node_addr) {
+    node_addr[slot] = 0;
   }
 
   static
-  info & as_info(StorageTy & v){
-    return *reinterpret_cast<info *>(&v);
+  void clean_ports_with_info(StorageTy * node_addr, info i) {
+    node_addr[prim] = 0;
+    node_addr[aux1] = 0;
+    node_addr[aux2] = 0;
+    *as_info(node_addr + INFO) = i;
   }
 
-  static constexpr StorageTy node_size = (INFO + 1);
-
-  // port_of_node
-  template<port_num slot> static
-  constexpr PortPtrTy Pointer(const NodePtrTy & addr){
-    return PortPtrTy(addr * node_size) + PortPtrTy(slot);
-  }
-
-  // +node_of_port
-  static
-  constexpr NodePtrTy addr_of(const PortPtrTy & ptrn) {
-    return NodePtrTy(ptrn / node_size);
-  }
-
-  // +port_of_port_addr
-  static
-  constexpr port_num slot_of(const PortPtrTy & ptrn) {
-    return port_num(ptrn % node_size);
-  }
-
-  // Numbers are immediate and occupy no space, indicated
-  // by 3 bits of info
-  // +encode_num
-  static
-  constexpr ValTy Numeric(const StorageTy & nd){
-    return ValTy{nd} | num_magic;
-  }
-
-  // +decode_num
-  static
-  constexpr StorageTy numb_of(const ValTy & ne){
-    return (StorageTy)ne;
-  }
-
-  // -type_of
-  static
-  constexpr bool value_is_number(const ValTy & p){
-    return p >= num_magic;
-  }
-
-  // FIXME???
-  // I'm not sure pointing to itself is good, since it may sweep problems under the carpet (???)
-  // wouldn't something like StorageTy(-1), perhaps, be better to expose potential problems
-  static
-  void clean_ports_with_info(NetTy & net, const NodePtrTy & addr, info i){
-    const NodePtrTy p0 = addr * node_size;
-    StorageTy* const this_node = net.nodes + p0;
-    this_node[prim] = p0 + prim;
-    this_node[aux1] = p0 + aux1;
-    this_node[aux2] = p0 + aux2;
-    as_info(this_node[INFO]) = i;
-  }
-
-  /* Not yet
-  template<node_typ type, KindTy kind> static
-  NodePtrTy alloc_node(NetTy & net) {
-    NodePtrTy addr;
+  StorageTy * alloc_node(node_typ type, StorageTy label) {
+    StorageTy * addr;
     if (net.freed_len > 0) {
       addr = net.freed[--net.freed_len];
-    } else {
-      addr = net.nodes_len / node_size;
+    }
+    else {
+      addr = net.nodes + net.nodes_len / node_size;
       net.nodes_len += node_size;
     }
     // FIXME??? Explicit node structure + bitfields?
     // clean_ports_with_info(net, addr, (kind << 6) + (type << 3));
-    clean_ports_with_info(net, addr, info{kind, type, 0});
-    return addr;
-  }
-  */
-
-  static
-  NodePtrTy alloc_node(NetTy & net, node_typ type, KindTy kind) {
-    NodePtrTy addr;
-    if (net.freed_len > 0) {
-      addr = net.freed[--net.freed_len];
-    } else {
-      addr = net.nodes_len / node_size;
-      net.nodes_len += node_size;
-    }
-    // FIXME??? Explicit node structure + bitfields?
-    // clean_ports_with_info(net, addr, (kind << 6) + (type << 3));
-    clean_ports_with_info(net, addr, info{kind, type, 0});
+    clean_ports_with_info(addr, info{ 0, type, label });
     return addr;
   }
 
-  static void free_node(NetTy & net, const NodePtrTy & addr) {
+  void free_node(StorageTy* addr) {
     // clean_ports_with_info(net, addr, 0);
-    clean_ports_with_info(net, addr, info{0, NOD, 0});
+    clean_ports_with_info(addr, info{ 0, NOD, 0 });
+    net.freed[net.freed_len++] = addr;
   }
 
-  static constexpr bool is_free(const NetTy & net, const NodePtrTy & addr) {
-    const PortPtrTy p0 = addr * node_size;
-    const StorageTy* const this_node = net.nodes + p0;
+  static constexpr
+  bool is_free(const StorageTy* addr) {
     return
-         this_node[prim] == p0 + prim
-      && this_node[aux1] == p0 + aux1
-      && this_node[aux2] == p0 + aux2
-      && this_node[INFO] == 0;
+         addr[prim] == 0
+      && addr[aux1] == 0
+      && addr[aux2] == 0
+      && addr[INFO] == 0;
   }
 
-  template<port_num slot> static
-  constexpr bool is_numeric(const NetTy & net, const NodePtrTy & addr) {
-    return (net.nodes[addr * node_size + INFO] >> slot) & 1;
+  static CONSTEXPR
+  intptr_t offset_of_port_in_bytes(const StorageTy* p) {
+    return intptr_t(p) & 0xf;
+  }
+
+  static CONSTEXPR
+  intptr_t slot_of(const StorageTy* p) {
+    return offset_of_port_in_bytes(p) / sizeof(StorageTy);
+  }
+
+  static CONSTEXPR
+  StorageTy* node_of_port(StorageTy* p) {
+    return (StorageTy *)(uintptr_t(p) & (uintptr_t(-1) << 4));
+  }
+
+  static CONSTEXPR
+  const StorageTy* node_of_port(const StorageTy* p) {
+    return (const StorageTy*)(uintptr_t(p) & (uintptr_t(-1) << 4));
+  }
+
+  template<port_num slot>
+  static constexpr
+  StorageTy* Pointer(StorageTy* node_addr) {
+    return node_addr + slot;
+  }
+
+  template<port_num slot>
+  static constexpr
+  bool is_numeric(const StorageTy* node_addr) {
+    return (as_cinfo(node_addr + INFO)->is_num >> slot) & 1;
+  }
+
+  static CONSTEXPR
+  bool is_numeric(const StorageTy* ptrn) {
+    return (as_cinfo(node_of_port(ptrn)+INFO)->is_num >> slot_of(ptrn)) & 1;
   }
 
   static
-  bool is_numeric(const NetTy & net, const PortPtrTy & ptrn) {
-    return (as_info(net.nodes[ptrn]).is_num >> slot_of(ptrn)) & 1;
+  void set_port(StorageTy* node_addr, port_num slot, NumTy num) {
+    node_addr[slot] = num;
+    as_info(node_addr+INFO)->is_num |= (1 << slot);
   }
 
-  // +set_port_value
-  // FIXME, slot isn't constexpr yet
-  // template<port_num slot> static
-  // void set_port(NetTy & net, const NodePtrTy & addr, const ValTy & ptrn) {
   static
-  void set_port(NetTy & net, const NodePtrTy & addr, port_num slot, const ValTy & ptrn) {
-    const PortPtrTy p0 = addr * node_size;
-    if (value_is_number(ptrn)) {
-      net.nodes[p0 + slot] = numb_of(ptrn);
-      // net.nodes[p0 + INFO] |= (1 << slot);
-      as_info(net.nodes[p0 + INFO]).is_num |= (1 << slot); // equivalent but more portable
-    } else {
-      net.nodes[p0 + slot] = StorageTy(ptrn);
-      // net.nodes[p0 + INFO] &= ~(1 << slot);
-      as_info(net.nodes[p0 + INFO]).is_num &= ~(1 << slot); // equivalent but more portable
+  void set_port(StorageTy* node_addr, port_num slot, const StorageTy* port_addr) {
+    node_addr[slot] = int(port_addr - (node_addr + slot));
+    as_info(node_addr + INFO)->is_num &= ~(1 << slot);
+  }
+
+  // Port of port (not node)!
+  static constexpr
+  const StorageTy* get_port(const StorageTy* port_addr) {
+    return port_addr + *port_addr;
+  }
+
+  static constexpr
+  StorageTy* get_port(StorageTy* port_addr) {
+    return port_addr + *port_addr;
+  }
+
+  static constexpr
+  NumTy get_number(const StorageTy* port_addr) {
+    return *port_addr;
+  }
+
+  template<node_typ ntype>
+  static
+  void set_type(StorageTy* node_addr) {
+    as_info(node_addr + INFO)->type = ntype;
+  }
+
+  static CONSTEXPR
+  node_typ
+  get_type(const StorageTy* node_addr) {
+    return as_cinfo(node_addr + INFO)->type;
+  }
+
+  static CONSTEXPR
+  StorageTy
+  get_kind(const StorageTy* node_addr) {
+    return as_cinfo(node_addr + INFO)->kind;
+  }
+
+  // enter_port is get_port
+
+  static constexpr
+  bool is_redex(const StorageTy* node_addr) {
+    if (is_numeric<prim>(node_addr)) return true;
+    const StorageTy* b_ptrn = get_port(node_addr + prim);
+    return slot_of(b_ptrn) == prim && !is_free(node_addr);
+  }
+
+  void put_number_to_port(StorageTy* node_ptr, port_num slot, NumTy num) {
+    set_port(node_ptr, slot, num);
+    if (slot == prim) {
+      net.redex[net.redex_len++] = node_ptr;
     }
   }
 
-  // FIXME??? Harmonize types ValTy vs PortPtrTy
-  template<port_num slot> static
-  constexpr ValTy get_port(const NetTy & net, const NodePtrTy & addr) {
-    StorageTy val = net.nodes[addr * node_size + slot];
-    return is_numeric<slot>(net, addr) ? Numeric(val) : ValTy(val);
+  void put_number_to_port(StorageTy* ptrn, NumTy num) {
+    put_number_to_port(node_of_port(ptrn), port_num(slot_of(ptrn)), num); // FIXME slot conversion
   }
 
-  static
-  ValTy get_port(const NetTy & net, const PortPtrTy & ptrn) {
-    StorageTy val = net.nodes[ptrn];
-    return is_numeric(net, ptrn) ? Numeric(val) : ValTy(val);
-  }
+  void link_non_num_ports(StorageTy* a_ptrn, StorageTy* b_ptrn) {
+    const auto a_slot = slot_of(a_ptrn);
+    const auto b_slot = slot_of(b_ptrn);
+    auto a_node_ptr = node_of_port(a_ptrn);
+    auto b_node_ptr = node_of_port(b_ptrn);
+    set_port(a_node_ptr, port_num(a_slot), b_ptrn); // FIXME slot conversion
+    set_port(b_node_ptr, port_num(b_slot), a_ptrn); // FIXME slot conversion
 
-  template<node_typ ntype> static
-  void set_type(NetTy & net, const NodePtrTy & addr) {
-    // net.nodes[addr * node_size + INFO] = (net->nodes[addr * node_size + INFO] & ~0b111000) | (type << 3);
-    as_info(net.nodes[addr * node_size + INFO]).type = ntype;
-  }
-
-  static
-  node_typ get_type(NetTy & net, const NodePtrTy & addr) {
-    return as_info(net.nodes[addr * node_size + INFO]).type;
-  }
-
-  static
-  KindTy get_kind(NetTy & net, const NodePtrTy & addr) {
-    return as_info(net.nodes[addr * node_size + INFO]).kind;
-  }
-
-  static
-  ValTy enter_port(NetTy & net, const PortPtrTy & ptrn) {
-    if (value_is_number(ptrn)) {
-      printf("[ERROR]\nCan't enter a numeric pointer.");
-      return 0;
-    } else {
-      return get_port(net, ptrn);
+    if (a_slot == prim && b_slot == prim) {
+      net.redex[net.redex_len++] = b_node_ptr;
     }
   }
 
-  static
-  bool is_redex(NetTy & net, const NodePtrTy & addr) {
-    PortPtrTy a_ptrn = Pointer<prim>(addr);
-    PortPtrTy b_ptrn = enter_port(net, a_ptrn);
-    return value_is_number(b_ptrn) || (slot_of(b_ptrn) == prim && !is_free(net, addr));
+  void link_ports(StorageTy* a_ptrn, StorageTy* b_ptrn) {
+    auto a_numb = is_numeric(a_ptrn);
+    auto b_numb = is_numeric(b_ptrn);
+    if (a_numb && b_numb)
+      return;
+
+    if (a_numb)
+      put_number_to_port(b_ptrn, get_number(a_ptrn));
+    else if (b_numb)
+      put_number_to_port(a_ptrn, get_number(b_ptrn));
+    else
+      link_non_num_ports(a_ptrn, b_ptrn);
   }
 
-  static
-  void link_ports(NetTy & net, const PortPtrTy & a_ptrn, const PortPtrTy & b_ptrn) {
-    bool a_numb = value_is_number(a_ptrn);
-    bool b_numb = value_is_number(b_ptrn);
+  template <port_num a_slot>
+  void link_non_num_ports(StorageTy* a_node_ptr, StorageTy* b_ptrn) {
+    const auto b_slot = slot_of(b_ptrn);
+    set_port(a_node_ptr, a_slot, b_ptrn);
 
-    // Point ports to each-other
-    if (!a_numb) set_port(net, addr_of(a_ptrn), slot_of(a_ptrn), b_ptrn);
-    if (!b_numb) set_port(net, addr_of(b_ptrn), slot_of(b_ptrn), a_ptrn);
+    auto b_node_ptr = node_of_port(b_ptrn);
+    set_port(b_node_ptr, port_num(b_slot), a_node_ptr + a_slot); // FIXME slot conversion
 
-    // If both are main ports, add this to the list of active pairs
-    if (!(a_numb && b_numb) && (a_numb || slot_of(a_ptrn) == 0) && (b_numb || slot_of(b_ptrn) == 0)) {
-      net.redex[net.redex_len++] = a_numb ? addr_of(b_ptrn) : addr_of(a_ptrn);
+    if constexpr (a_slot == prim) {
+      if (b_slot == prim) {
+        net.redex[net.redex_len++] = b_node_ptr;
+      }
     }
   }
+
+  template <port_num a_slot>
+  void link_ports(StorageTy* a_node_ptr, StorageTy* b_ptrn) {
+    if (is_numeric(b_ptrn))
+      put_number_to_port(a_node_ptr, a_slot, get_number(b_ptrn));
+    else
+      link_non_num_ports<a_slot>(a_node_ptr, b_ptrn);
+  }
+
+#undef as_info
+#undef as_cinfo
 };
-
-// Impossible ATM
-#define CONSTEXPR
 
 template <typename cfg>
 CONSTEXPR
-void rewrite(typename cfg::NetTy & net, const typename cfg::NodePtrTy & a_addr) {
-  #define POINTER(a, p) cfg::template Pointer<p>(a)
+void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
+#define POINTER(a, p) cfg::template Pointer<p>(a)
 
-  CONSTEXPR auto b_ptrn = cfg::template get_port<prim>(net, a_addr);
+  const bool a_is_num = cfg::template is_numeric<prim>(a_addr);
+  const auto a_type = cfg::get_type(a_addr);
+  const auto a_kind = cfg::get_kind(a_addr);
 
-  if CONSTEXPR (cfg::value_is_number(b_ptrn)) {
-    auto a_type = cfg::get_type(net, a_addr);
-    auto a_kind = cfg::get_kind(net, a_addr);
+  if CONSTEXPR (a_is_num) {
+    const auto fst = cfg::get_number(POINTER(a_addr, prim));
 
     // UnaryOperation
     if (a_type == OP1) {
-      auto dst = cfg::enter_port(net, POINTER(a_addr, aux2));
-      auto fst = cfg::numb_of(b_ptrn);
-      auto snd = cfg::numb_of(cfg::enter_port(net, POINTER(a_addr, aux1)));
-      typename cfg::ValTy res;
+      auto dst = cfg::get_port(POINTER(a_addr, aux2));
+      const auto snd = cfg::get_number(POINTER(a_addr, aux1));
+      typename cfg::NumTy res;
       switch (a_kind) {
-        case  0: res = cfg::Numeric(fst + snd); break;
-        case  1: res = cfg::Numeric(fst - snd); break;
-        case  2: res = cfg::Numeric(fst * snd); break;
-        case  3: res = cfg::Numeric(fst / snd); break;
-        case  4: res = cfg::Numeric(fst % snd); break;
-        case  5: res = cfg::Numeric((u32)(pow((float)fst, (float)snd))); break;                   // FIXME??? u32
-        case  6: res = cfg::Numeric((u32)(pow((float)fst, ((float)snd / pow(2.0,32.0))))); break; // FIXME??? u32
-        case  7: res = cfg::Numeric(fst & snd); break;
-        case  8: res = cfg::Numeric(fst | snd); break;
-        case  9: res = cfg::Numeric(fst ^ snd); break;
-        case 10: res = cfg::Numeric(~snd); break;
-        case 11: res = cfg::Numeric(fst >> snd); break;
-        case 12: res = cfg::Numeric(fst << snd); break;
-        case 13: res = cfg::Numeric(fst > snd ? 1 : 0); break;
-        case 14: res = cfg::Numeric(fst < snd ? 1 : 0); break;
-        case 15: res = cfg::Numeric(fst == snd ? 1 : 0); break;
+        case  0: res = fst + snd; break;
+        case  1: res = fst - snd; break;
+        case  2: res = fst * snd; break;
+        case  3: res = fst / snd; break;
+        case  4: res = fst % snd; break;
+        case  5: res = (u32)(pow((float)fst, (float)snd)); break;                   // FIXME??? u32
+        case  6: res = (u32)(pow((float)fst, ((float)snd / pow(2.0,32.0)))); break; // FIXME??? u32
+        case  7: res = fst & snd; break;
+        case  8: res = fst | snd; break;
+        case  9: res = fst ^ snd; break;
+        case 10: res = ~snd; break;
+        case 11: res = fst >> snd; break;
+        case 12: res = fst << snd; break;
+        case 13: res = fst > snd ? 1 : 0; break;
+        case 14: res = fst < snd ? 1 : 0; break;
+        case 15: res = fst == snd ? 1 : 0; break;
         default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
       }
-      cfg::link_ports(net, dst, res);
-      // cfg::unlink_port(net, Pointer(a_addr, 0));
-      // cfg::unlink_port(net, Pointer(a_addr, 2));
-      cfg::free_node(net, a_addr);
+      net.put_number_to_port(dst, res);
+      net.free_node(a_addr);
 
     // BinaryOperation
     } else if (a_type == OP2) {
-      cfg::template set_type<OP1>(net, a_addr);
-      cfg::link_ports(net, POINTER(a_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux1)));
-      // unlink_port(net, Pointer(a_addr, 1));
-      cfg::link_ports(net, POINTER(a_addr, aux1), b_ptrn);
+      cfg::template set_type<OP1>(a_addr);
+      net.template link_ports<prim>(a_addr, cfg::get_port(POINTER(a_addr, aux1)));
+      cfg::set_port(a_addr, aux1, fst);
 
     // NumberDuplication
     } else if (a_type == NOD) {
-      cfg::link_ports(net, b_ptrn, cfg::enter_port(net, POINTER(a_addr, aux1)));
-      cfg::link_ports(net, b_ptrn, cfg::enter_port(net, POINTER(a_addr, aux2)));
-      cfg::free_node(net, a_addr);
+      net.put_number_to_port(cfg::get_port(POINTER(a_addr, aux1)), fst);
+      net.put_number_to_port(cfg::get_port(POINTER(a_addr, aux2)), fst);
+      net.free_node(a_addr);
 
     // IfThenElse
     } else if (a_type == ITE) {
-      bool cond_val = cfg::numb_of(b_ptrn) == 0;
-      auto pair_ptr = cfg::enter_port(net, POINTER(a_addr, aux1));
-      cfg::template set_type<NOD>(net, a_addr);
-      cfg::link_ports(net, POINTER(a_addr, prim), pair_ptr);
-      // unlink_port(net, Pointer(a_addr, 1));
-      auto dest_ptr = cfg::enter_port(net, POINTER(a_addr, aux2));
-      auto cond_ptr = [&](bool c) { return c ? POINTER(a_addr, aux1) : POINTER(a_addr, aux2); };
-      cfg::link_ports(net, cond_ptr(!cond_val), dest_ptr);
-        // if (!cond_val) unlink_port(net, Pointer(a_addr, 2));
-      auto ptr = cond_ptr(cond_val);
-      cfg::link_ports(net, ptr, ptr);
-
+      cfg::template set_type<NOD>(a_addr);
+      // link to pair_ptr
+      net.template link_ports<prim>(a_addr, cfg::get_port(POINTER(a_addr, aux1)));
+      if (fst == 0) {
+        net.template link_ports<aux2>(a_addr, cfg::get_port(POINTER(a_addr, aux2)));
+        cfg::template clean_port<aux1>(a_addr);
+      }
+      else {
+        net.template link_ports<aux1>(a_addr, cfg::get_port(POINTER(a_addr, aux2)));
+        cfg::template clean_port<aux2>(a_addr);
+      }
     } else {
       printf("[ERROR]\nInvalid interaction.");
     }
 
   } else {
-    auto b_addr = cfg::addr_of(b_ptrn);
-    auto a_type = cfg::get_type(net, a_addr);
-    auto b_type = cfg::get_type(net, b_addr);
-    auto a_kind = cfg::get_kind(net, a_addr);
-    auto b_kind = cfg::get_kind(net, b_addr);
+    auto b_ptrn = cfg::get_port(POINTER(a_addr, prim));
+    auto b_addr = cfg::node_of_port(b_ptrn);
+    auto b_type = cfg::get_type(b_addr);
+    auto b_kind = cfg::get_kind(b_addr);
 
     // NodeAnnihilation, UnaryAnnihilation, BinaryAnnihilation
     if ( (a_type == NOD && b_type == NOD && a_kind == b_kind)
       || (a_type == OP1 && b_type == OP1)
       || (a_type == OP2 && b_type == OP2)
       || (a_type == ITE && b_type == ITE)) {
-      auto a_aux1_dest = cfg::enter_port(net, POINTER(a_addr, aux1));
-      auto b_aux1_dest = cfg::enter_port(net, POINTER(b_addr, aux1));
-      cfg::link_ports(net, a_aux1_dest, b_aux1_dest);
-      auto a_aux2_dest = cfg::enter_port(net, POINTER(a_addr, aux2));
-      auto b_aux2_dest = cfg::enter_port(net, POINTER(b_addr, aux2));
-      cfg::link_ports(net, a_aux2_dest, b_aux2_dest);
-      // for (u32 i = 0; i < 3; i++) {
-      //   unlink_port(net, Pointer(a_addr, i));
-      //   unlink_port(net, Pointer(b_addr, i));
-      // }
-      cfg::free_node(net, a_addr);
+      net.link_ports(cfg::get_port(POINTER(a_addr, aux1)), cfg::get_port(POINTER(b_addr, aux1)));
+      net.link_ports(cfg::get_port(POINTER(a_addr, aux2)), cfg::get_port(POINTER(b_addr, aux2)));
+      net.free_node(a_addr);
       if (a_addr != b_addr) {
-        cfg::free_node(net, b_addr);
+        net.free_node(b_addr);
       }
-
     // NodeDuplication, BinaryDuplication
     } else if
       (  (a_type == NOD && b_type == NOD && a_kind != b_kind)
       || (a_type == NOD && b_type == OP2)
       || (a_type == NOD && b_type == ITE)) {
-#ifdef ORIGINAL_DUP
-      auto p_addr = cfg::alloc_node(net, b_type, b_kind);
-      auto q_addr = cfg::alloc_node(net, b_type, b_kind);
-      auto r_addr = cfg::alloc_node(net, a_type, a_kind);
-      auto s_addr = cfg::alloc_node(net, a_type, a_kind);
-      cfg::link_ports(net, POINTER(r_addr, aux1), POINTER(p_addr, aux1));                        // 0
-      cfg::link_ports(net, POINTER(s_addr, aux1), POINTER(p_addr, aux2));                        // 1
-      cfg::link_ports(net, POINTER(r_addr, aux2), POINTER(q_addr, aux1));                        // 2
-      cfg::link_ports(net, POINTER(s_addr, aux2), POINTER(q_addr, aux2));                        // 3
-      cfg::link_ports(net, POINTER(p_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux1)));  // 4
-      cfg::link_ports(net, POINTER(q_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux2)));  // 5
-      cfg::link_ports(net, POINTER(r_addr, prim), cfg::enter_port(net, POINTER(b_addr, aux1)));  // 6
-      cfg::link_ports(net, POINTER(s_addr, prim), cfg::enter_port(net, POINTER(b_addr, aux2)));  // 7
-      // for (u32 i = 0; i < 3; i++) {
-      //   unlink_port(net, Pointer(a_addr, i));
-      //   unlink_port(net, Pointer(b_addr, i));
-      // }
-      cfg::free_node(net, a_addr);
-      if (a_addr != b_addr) {
-        cfg::free_node(net, b_addr);
-      }
-#else
-      auto p_addr = cfg::alloc_node(net, b_type, b_kind);
-      auto r_addr = cfg::alloc_node(net, a_type, a_kind);
+      auto p_addr = net.alloc_node(b_type, b_kind);
+      auto r_addr = net.alloc_node(a_type, a_kind);
 
       // Reuse b for q, a for s
       #define q_addr b_addr
       #define s_addr a_addr
 
       // below the lists of all available ports are laid down for each step (prepended with ++),
-      // original steps are simply copypasted
+      // original steps are simply numbered and copypasted
 
+      // FIXME!!! OPTIMIZE!, SHOULD look if q ports are numeric
       //++ a0, b0, p0, p1, p2, r0, r1, r2
-      cfg::link_ports(net, POINTER(p_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux1)));  // 4
+      net.link_ports(POINTER(p_addr, prim), cfg::get_port(POINTER(a_addr, aux1)));  // 4
       //++ a0, b0, a1, p1, p2, r0, r1, r2
-      cfg::link_ports(net, POINTER(q_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux2)));  // 5 b_addr is reused instead of q_addr (b0 is available)
+      net.link_ports(POINTER(q_addr, prim), cfg::get_port(POINTER(a_addr, aux2)));  // 5 b_addr is reused instead of q_addr (b0 is available)
       //++ a0, a2, a1, p1, p2, r0, r1, r2
-      cfg::link_ports(net, POINTER(r_addr, prim), cfg::enter_port(net, POINTER(b_addr, aux1)));  // 6
+      net.link_ports(POINTER(r_addr, prim), cfg::get_port(POINTER(b_addr, aux1)));  // 6
       //++ a0, a2, a1, p1, p2, b1, r1, r2
-      cfg::link_ports(net, POINTER(s_addr, prim), cfg::enter_port(net, POINTER(b_addr, aux2)));  // 7 a_addr is reused instead of s_addr (a0 is available)
+      net.link_ports(POINTER(s_addr, prim), cfg::get_port(POINTER(b_addr, aux2)));  // 7 a_addr is reused instead of s_addr (a0 is available)
       //++ b2, a2, a1, p1, p2, b1, r1, r2
-      cfg::link_ports(net, POINTER(r_addr, aux1), POINTER(p_addr, aux1));                        // 0
+      net.link_ports(POINTER(r_addr, aux1), POINTER(p_addr, aux1));                 // 0
       //++ b2, a2, a1, p2, b1, r2
-      cfg::link_ports(net, POINTER(s_addr, aux1), POINTER(p_addr, aux2));                        // 1 a_addr is reused instead of s_addr (a1 is available)
+      net.link_ports(POINTER(s_addr, aux1), POINTER(p_addr, aux2));                 // 1 a_addr is reused instead of s_addr (a1 is available)
       //++ b2, a2, b1, r2
-      cfg::link_ports(net, POINTER(r_addr, aux2), POINTER(q_addr, aux1));                        // 2 b_addr is reused instead of q_addr (b1 is available)
+      net.link_ports(POINTER(r_addr, aux2), POINTER(q_addr, aux1));                 // 2 b_addr is reused instead of q_addr (b1 is available)
       //++ b2, a2
-      cfg::link_ports(net, POINTER(s_addr, aux2), POINTER(q_addr, aux2));                        // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
-#endif
+      net.link_ports(POINTER(s_addr, aux2), POINTER(q_addr, aux2));                 // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
     // UnaryDuplication
     } else if
       (  (a_type == NOD && b_type == OP1)
       || (a_type == ITE && b_type == OP1)) {
-#ifdef ORIGINAL_DUP
-      auto p_addr = cfg::alloc_node(net, b_type, b_kind);
-      auto q_addr = cfg::alloc_node(net, b_type, b_kind);
-      auto s_addr = cfg::alloc_node(net, a_type, a_kind);
-      cfg::link_ports(net, POINTER(p_addr, aux1), cfg::enter_port(net, POINTER(b_addr, aux1)));  // 0
-      cfg::link_ports(net, POINTER(q_addr, aux1), cfg::enter_port(net, POINTER(b_addr, aux1)));  // 1
-      cfg::link_ports(net, POINTER(s_addr, aux1), POINTER(p_addr, aux2));                        // 2
-      cfg::link_ports(net, POINTER(s_addr, aux2), POINTER(q_addr, aux2));                        // 3
-      cfg::link_ports(net, POINTER(p_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux1)));  // 4
-      cfg::link_ports(net, POINTER(q_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux2)));  // 5
-      cfg::link_ports(net, POINTER(s_addr, prim), cfg::enter_port(net, POINTER(b_addr, aux2)));  // 6
-      // for (u32 i = 0; i < 3; i++) {
-      //   unlink_port(net, Pointer(a_addr, i));
-      //   unlink_port(net, Pointer(b_addr, i));
-      // }
-      cfg::free_node(net, a_addr);
-      if (a_addr != b_addr) {
-        cfg::free_node(net, b_addr);
-      }
-#else
-      auto p_addr = cfg::alloc_node(net, b_type, b_kind);
-
+      auto p_addr = net.alloc_node(b_type, b_kind);
       // Reuse b for q, a for s (defined above ^)
-
       // below the lists of all available ports are laid down for each step (prepended with ++),
       // original steps are simply copypasted
 
-      //++ a0, b0, p0, p1, p2
-      cfg::link_ports(net, POINTER(p_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux1)));  // 4
-      //++ a0, b0, a1, p1, p2
-      cfg::link_ports(net, POINTER(q_addr, prim), cfg::enter_port(net, POINTER(a_addr, aux2)));  // 5 b_addr is reused instead of q_addr (b0 is available)
-      //++ a0, a2, a1, p1, p2
-      cfg::link_ports(net, POINTER(s_addr, prim), cfg::enter_port(net, POINTER(b_addr, aux2)));  // 6 a_addr is reused instead of s_addr (a0 is available)
-      //++ b2, a2, a1, p1, p2
-      cfg::link_ports(net, POINTER(p_addr, aux1), cfg::enter_port(net, POINTER(b_addr, aux1)));  // 0
-      //++ b2, a2, a1, b1, p2
-      // cfg::link_ports(net, POINTER(q_addr, aux1), cfg::enter_port(net, POINTER(b_addr, aux1)));  // 1 collapsed since b is q
-      //++ b2, a2, a1, p2
-      cfg::link_ports(net, POINTER(s_addr, aux1), POINTER(p_addr, aux2));                        // 2 a_addr is reused instead of s_addr (a1 is available)
-      //++ b2, a2
-      cfg::link_ports(net, POINTER(s_addr, aux2), POINTER(q_addr, aux2));                        // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
+      // FIXME!!! OPTIMIZE!, SHOULD look if b ports are numeric
+      // a0, b0, p0, p1, p2
+      net.link_ports(POINTER(p_addr, prim), cfg::get_port(POINTER(a_addr, aux1)));  // 4
+      // a0, b0, a1, p1, p2
+      net.link_ports(POINTER(q_addr, prim), cfg::get_port(POINTER(a_addr, aux2)));  // 5 b_addr is reused instead of q_addr (b0 is available)
+      // a0, a2, a1, p1, p2
+      net.link_ports(POINTER(s_addr, prim), cfg::get_port(POINTER(b_addr, aux2)));  // 6 a_addr is reused instead of s_addr (a0 is available)
+      // b2, a2, a1, p1, p2
+      net.link_ports(POINTER(p_addr, aux1), cfg::get_port(POINTER(b_addr, aux1)));  // 0
+      // b2, a2, a1, b1, p2
+      // net.link_ports(POINTER(q_addr, aux1), cfg::get_port(POINTER(b_addr, aux1)));  // 1 collapsed since b is q
+      // b2, a2, a1, p2
+      net.link_ports(POINTER(s_addr, aux1), POINTER(p_addr, aux2));                        // 2 a_addr is reused instead of s_addr (a1 is available)
+      // b2, a2
+      net.link_ports(POINTER(s_addr, aux2), POINTER(q_addr, aux2));                        // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
 
       #undef q_addr
       #undef s_addr
-#endif
     // Permutations
     } else if (a_type == OP1 && b_type == NOD) {
       return rewrite<cfg>(net, b_addr);
@@ -473,7 +431,6 @@ void rewrite(typename cfg::NetTy & net, const typename cfg::NodePtrTy & a_addr) 
       return rewrite<cfg>(net, b_addr);
     } else if (a_type == ITE && b_type == NOD) {
       return rewrite<cfg>(net, b_addr);
-
     // InvalidInteraction
     } else {
       printf("[ERROR]\nInvalid interaction.");
@@ -482,8 +439,8 @@ void rewrite(typename cfg::NetTy & net, const typename cfg::NodePtrTy & a_addr) 
 }
 
 CONSTEXPR
-void rewrite_u32array(config_u32array::NetTy &net, const u32 & a_addr) {
-  rewrite<config_u32array>(net, a_addr);
+void rewrite_i32array(config_i32array & net, int * a_addr) {
+  rewrite<config_i32array>(net, a_addr);
 }
 
 #if 0
@@ -559,6 +516,8 @@ static u32 nodes[] = {
 
 int main () {
   Net net;
+  // malloc-ed mem shall be at least 16-bytes aligned on 64-byte ptrs arch
+  // FIXME??? Check 32-bit archs and/or make things more portable
   net.nodes = reinterpret_cast<uint32_t*>(malloc(sizeof(u32) * 200000000));
   net.redex = reinterpret_cast<uint32_t*>(malloc(sizeof(u32) * 10000000));
   net.freed = reinterpret_cast<uint32_t*>(malloc(sizeof(u32) * 10000000));
@@ -581,6 +540,6 @@ int main () {
 }
 #endif
 int main(){
-  printf("%u bits for label, %u bits for node type, %d bits for isnum bits\n", config_u32array::num_of_bits_4_label, num_of_bits_4_node_typ, INFO);
+  printf("%u bits for label, %u bits for node type, %d bits for isnum bits\n", config_i32array::num_of_bits_4_label, num_of_bits_4_node_typ, INFO);
   return 0;
 }
