@@ -7,6 +7,9 @@ LDFLAGS = -lm
 default:
 	$(CC) $(CFLAGS) $(SRC) -o test $(LDFLAGS)
 
+inline:
+	$(CC) $(CFLAGS) $(SRC) -o test_inlined $(LDFLAGS) -D_INLINED_REWRITE_
+
 debug:
 	$(CC) $(DFLAGS) $(SRC) -o debug_test $(LDFLAGS) -DDEBUG
 

@@ -143,7 +143,8 @@ inline void swap(u32* value1, u32* value2) {
 }
 
 // Rewrites an active pair
-void rewrite(Net* net, u32 a_addr) {
+void rewrite(Net* net, u32 a_addr_input) {
+  #if !defined(_INLINED_REWRITE_)
   u64 b_ptrn = get_port(net, a_addr, 0);
 
   if (type_of(b_ptrn) == PTR) {
@@ -280,6 +281,295 @@ void rewrite(Net* net, u32 a_addr) {
        printf("[ERROR]\nInvalid interaction.");
      }
   }
+  #else /* _INLINED_REWRITE_ */
+  u32 a_addr = a_addr_input;
+  u64 a_ptrn_0 = a_addr<<2;
+  u64 b_ptrn = (u64)net->nodes[a_ptrn_0];
+  u64 b_ptrn_0 = (b_ptrn >> 2) << 2;
+
+  // If node_b is not a numeric value...
+  if (!(net->nodes[a_ptrn_0 + 3] & 0x1)) {
+    u32 b_addr = (u32)(b_ptrn >> 2);
+
+    u64 a_ptrn_3 = a_ptrn_0 + 3;
+    u64 b_ptrn_3 = b_ptrn_0 + 3;
+
+    u32 na_p3 = net->nodes[a_ptrn_3];
+    u32 nb_p3 = net->nodes[b_ptrn_3];
+
+    u32 a_type = (na_p3 >> 3) & 0x7;
+    u32 b_type = (nb_p3 >> 3) & 0x7;
+
+    // Permutations
+    if (b_type == NOD && (a_type == OP1 || a_type == OP2 || a_type == ITE)) {
+      // swap adress values
+      u32 temp = a_addr;
+      a_addr = b_addr;
+      b_addr = temp;
+
+      // swap type values
+      temp = a_type;
+      a_type = b_type;
+      b_type = temp;
+
+      // swap ptrn_0 values
+      u64 temp_ptrn = a_ptrn_0;
+      a_ptrn_0 = b_ptrn_0;
+      b_ptrn_0 = temp_ptrn;
+
+      a_ptrn_3 = a_ptrn_0 + 3;
+      b_ptrn_3 = b_ptrn_0 + 3;
+
+      na_p3 = net->nodes[a_ptrn_3];
+      nb_p3 = net->nodes[b_ptrn_3];
+
+    }
+
+    u32 a_kind = na_p3 >> 6;
+    u32 b_kind = nb_p3 >> 6;
+
+    // NodeAnnihilation, UnaryAnnihilation, BinaryAnnihilation
+    if ( (a_type == NOD && b_type == NOD && a_kind == b_kind)
+      || (a_type == OP1 && b_type == OP1)
+      || (a_type == OP2 && b_type == OP2)
+      || (a_type == ITE && b_type == ITE)) {
+
+      u64 a_aux1_dest, a_aux2_dest, b_aux1_dest, b_aux2_dest;
+      u32 a1_numb, a2_numb, b1_numb, b2_numb;
+
+      //Link aux1 ports
+      a_aux1_dest = net->nodes[a_ptrn_0 + 1];
+      b_aux1_dest = net->nodes[b_ptrn_0 + 1];
+
+      a1_numb = ((na_p3 >> 1) & 1);
+      b1_numb = ((nb_p3 >> 1) & 1);
+
+      // Point ports to each-other
+      if (a1_numb) {
+        a_aux1_dest += (u64)0x100000000;
+      } else {
+        u64 dest_0 = (u32)(a_aux1_dest >> 2) << 2;
+        u32 slot = (u32)(a_aux1_dest & 3);
+        net->nodes[dest_0 + slot] = (u32)b_aux1_dest;
+        if (b1_numb) net->nodes[dest_0 + 3] |= (1 << slot); else net->nodes[dest_0 + 3] &= ~(1 << slot);
+      }
+
+      if (b1_numb) {
+        b_aux1_dest += (u64)0x100000000;
+      } else {
+        u64 dest_0 = (u32)(b_aux1_dest >> 2) << 2;
+        u32 slot = (u32)(b_aux1_dest & 3);
+        net->nodes[dest_0 + slot] = (u32)a_aux1_dest;
+        if (a1_numb) net->nodes[dest_0 + 3] |= (1 << slot); else net->nodes[dest_0 + 3] &= ~(1 << slot);
+      }
+
+      // If both aux2 are main ports, add this to the list of active pairs
+      if (!(a1_numb && b1_numb) && (a1_numb || (a_aux1_dest & 3) == 0) && (b1_numb || (b_aux1_dest & 3) == 0)) {
+        net->redex[net->redex_len++] = a1_numb ? b_aux1_dest >> 2 : a_aux1_dest >> 2;
+      }
+
+      // link aux2 ports
+      // ATTENTION: Order is important. It is necessary to read a_aux2_dest and
+      // b_aux2_dest only AFTER linking a_aux1_dest and b_aux1_dest
+      a_aux2_dest = net->nodes[a_ptrn_0 + 2];
+      b_aux2_dest = net->nodes[b_ptrn_0 + 2];
+
+      a2_numb = ((na_p3 >> 2) & 1);
+      b2_numb = ((nb_p3 >> 2) & 1);
+
+      // Point ports to each-other
+      if (a2_numb) {
+        a_aux2_dest += (u64)0x100000000;
+      } else {
+        u64 dest_0 = (u32)(a_aux2_dest >> 2) << 2;
+        u32 slot = (u32)(a_aux2_dest & 3);
+        net->nodes[dest_0 + slot] = (u32)b_aux2_dest;
+        if (b2_numb) net->nodes[dest_0 + 3] |= (1 << slot); else net->nodes[dest_0 + 3] &= ~(1 << slot);
+      }
+
+      if (b2_numb) {
+        b_aux2_dest += (u64)0x100000000;
+      } else {
+        u64 dest_0 = (u32)(b_aux2_dest >> 2) << 2;
+        u32 slot = (u32)(b_aux2_dest & 3);
+        net->nodes[dest_0 + slot] = (u32)a_aux2_dest;
+        if (a2_numb) net->nodes[dest_0 + 3] |= (1 << slot); else net->nodes[dest_0 + 3] &= ~(1 << slot);
+      }
+
+      // If both aux2 are main ports, add this to the list of active pairs
+      if (!(a2_numb && b2_numb) && (a2_numb || (a_aux2_dest & 3) == 0) && (b2_numb || (b_aux2_dest & 3) == 0)) {
+        net->redex[net->redex_len++] = a2_numb ? b_aux2_dest >> 2 : a_aux2_dest >> 2;
+      }
+
+      // unlink ports
+      for (u32 i = 0; i < 3; i++) {
+        u32 a_ptrn = a_ptrn_0 + i;
+        u32 b_ptrn = b_ptrn_0 + i;
+        u32 enter_a = net->nodes[a_ptrn];
+        u32 enter_b = net->nodes[b_ptrn];
+
+        net->nodes[a_ptrn] = a_ptrn;
+        net->nodes[b_ptrn] = b_ptrn;
+
+        // If nodes are not numeric and point back to annihilated nodes, clear ports
+        if (!((net->nodes[a_ptrn_3] >> i) & 1) && net->nodes[enter_a] == a_ptrn) {
+          net->nodes[enter_a] = enter_a;
+        }
+
+        if (!((net->nodes[b_ptrn_3] >> i) & 1) && net->nodes[enter_b] == b_ptrn) {
+          net->nodes[enter_b] = enter_b;
+        }
+      }
+
+      // Free annihilated nodes
+      net->nodes[a_ptrn_3] = 0;
+      net->freed[net->freed_len++] = a_addr;
+      if (a_addr != b_addr) {
+        net->nodes[b_ptrn_3] = 0;
+        net->freed[net->freed_len++] = b_addr;
+      }
+
+    // NodeDuplication, BinaryDuplication
+    } else if
+      (  (a_type == NOD && b_type == NOD && a_kind != b_kind)
+      || (a_type == NOD && b_type == OP2)
+      || (a_type == NOD && b_type == ITE)) {
+
+      //u32 p_addr = alloc_node(net, b_type, b_kind);
+      //u32 q_addr = alloc_node(net, a_type, a_kind);
+      u32 p_addr, q_addr;
+      if (net->freed_len >= 2) {
+        p_addr = net->freed[--net->freed_len];
+        q_addr = net->freed[--net->freed_len];
+      }
+      else if (net->freed_len > 0) {
+        p_addr = net->freed[--net->freed_len];
+        q_addr = net->nodes_len >> 2;
+        net->nodes_len += 4;
+      }
+      else {
+        p_addr = net->nodes_len >> 2;
+        q_addr = p_addr + 1;
+        net->nodes_len += 8;
+      }
+
+      u64 p_ptrn_0 = p_addr << 2;
+      u64 q_ptrn_0 = q_addr << 2;
+
+      for (int i = 0; i < 3; i++) {
+        // TODO: Test if it is faster to just store values in a variable and reuse them
+        net->nodes[p_ptrn_0 + i] = p_ptrn_0 + i;
+        net->nodes[q_ptrn_0 + i] = q_ptrn_0 + i;
+      }
+      net->nodes[p_ptrn_0 + 3] = (b_kind << 6) + ((b_type & 0x7) << 3);
+      net->nodes[q_ptrn_0 + 3] = (a_kind << 6) + ((a_type & 0x7) << 3);
+
+
+      link_ports(net, Pointer(b_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+      link_ports(net, Pointer(p_addr, 0), enter_port(net, Pointer(a_addr, 2)));
+      link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(b_addr, 1)));
+      link_ports(net, Pointer(q_addr, 0), enter_port(net, Pointer(b_addr, 2)));
+      link_ports(net, Pointer(a_addr, 1), Pointer(b_addr, 1));
+      link_ports(net, Pointer(q_addr, 1), Pointer(b_addr, 2));
+      link_ports(net, Pointer(a_addr, 2), Pointer(p_addr, 1));
+      link_ports(net, Pointer(q_addr, 2), Pointer(p_addr, 2));
+
+    // UnaryDuplication
+    } else if
+      (  (a_type == NOD && b_type == OP1)
+      || (a_type == ITE && b_type == OP1)) {
+
+      u32 c_addr;// = alloc_node(net, b_type, b_kind);
+      if (net->freed_len > 0) {
+        c_addr = net->freed[--net->freed_len];
+      }
+      else {
+        c_addr = net->nodes_len >> 2;
+        net->nodes_len += 4;
+      }
+      u64 c_ptrn_0 = c_addr << 2;
+      net->nodes[c_ptrn_0] = c_ptrn_0;
+      net->nodes[c_ptrn_0 + 1] = c_ptrn_0 + 1;
+      net->nodes[c_ptrn_0 + 2] = c_ptrn_0 + 2;
+      net->nodes[c_ptrn_0 + 3] = (b_kind << 6) + ((b_type & 0x7) << 3);
+
+      link_ports(net, Pointer(b_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+      link_ports(net, Pointer(c_addr, 0), enter_port(net, Pointer(a_addr, 2)));
+      link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(b_addr, 2)));
+      link_ports(net, Pointer(c_addr, 1), enter_port(net, Pointer(b_addr, 1)));
+      link_ports(net, Pointer(a_addr, 1), Pointer(b_addr, 2));
+      link_ports(net, Pointer(a_addr, 2), Pointer(c_addr, 2));
+
+    // InvalidInteraction
+    } else {
+      printf("[ERROR]\nInvalid interaction.");
+    }
+
+  } else {
+    b_ptrn += (u64)0x100000000;
+    u32 a_type = get_type(net, a_addr);
+    u32 a_kind = get_kind(net, a_addr);
+
+     // UnaryOperation
+     if (a_type == OP1) {
+       u64 dst = enter_port(net, Pointer(a_addr, 2));
+       u32 fst = numb_of(b_ptrn);
+       u32 snd = numb_of(enter_port(net, Pointer(a_addr, 1)));
+       u64 res;
+       switch (a_kind) {
+         case  0: res = Numeric(fst + snd); break;
+         case  1: res = Numeric(fst - snd); break;
+         case  2: res = Numeric(fst * snd); break;
+         case  3: res = Numeric(fst / snd); break;
+         case  4: res = Numeric(fst % snd); break;
+         case  5: res = Numeric((u32)(pow((float)fst, (float)snd))); break;
+         case  6: res = Numeric((u32)(pow((float)fst, ((float)snd / pow(2.0,32.0))))); break;
+         case  7: res = Numeric(fst & snd); break;
+         case  8: res = Numeric(fst | snd); break;
+         case  9: res = Numeric(fst ^ snd); break;
+         case 10: res = Numeric(~snd); break;
+         case 11: res = Numeric(fst >> snd); break;
+         case 12: res = Numeric(fst << snd); break;
+         case 13: res = Numeric(fst > snd ? 1 : 0); break;
+         case 14: res = Numeric(fst < snd ? 1 : 0); break;
+         case 15: res = Numeric(fst == snd ? 1 : 0); break;
+         default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
+       }
+       link_ports(net, dst, res);
+       unlink_port(net, Pointer(a_addr, 0));
+       unlink_port(net, Pointer(a_addr, 2));
+       free_node(net, a_addr);
+
+     // BinaryOperation
+     } else if (a_type == OP2) {
+       set_type(net, a_addr, OP1);
+       link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+       unlink_port(net, Pointer(a_addr, 1));
+       link_ports(net, Pointer(a_addr, 1), b_ptrn);
+
+     // NumberDuplication
+     } else if (a_type == NOD) {
+       link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
+       link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 2)));
+       free_node(net, a_addr);
+
+     // IfThenElse
+     } else if (a_type == ITE) {
+       u32 cond_val = numb_of(b_ptrn) == 0;
+       u64 pair_ptr = enter_port(net, Pointer(a_addr, 1));
+       set_type(net, a_addr, NOD);
+       link_ports(net, Pointer(a_addr, 0), pair_ptr);
+       unlink_port(net, Pointer(a_addr, 1));
+       u64 dest_ptr = enter_port(net, Pointer(a_addr, 2));
+       link_ports(net, Pointer(a_addr, cond_val ? 2 : 1), dest_ptr);
+         if (!cond_val) unlink_port(net, Pointer(a_addr, 2));
+       link_ports(net, Pointer(a_addr, cond_val ? 1 : 2), Pointer(a_addr, cond_val ? 1 : 2));
+
+     } else {
+       printf("[ERROR]\nInvalid interaction.");
+     }
+  }
+  #endif /*_INLINED_REWRITE_*/
 }
 
 // Rewrites active pairs until none is left, reducing the graph to normal form
