@@ -430,14 +430,15 @@ void rewrite(Net* net, u32 a_addr_input) {
       }
 
     // NodeDuplication, BinaryDuplication
+    // TODO: addr_ofs, set_ports and slot_ofs
     } else if
       (  (a_type == NOD && b_type == NOD && a_kind != b_kind)
       || (a_type == NOD && b_type == OP2)
       || (a_type == NOD && b_type == ITE)) {
 
-      //u32 p_addr = alloc_node(net, b_type, b_kind);
-      //u32 q_addr = alloc_node(net, a_type, a_kind);
       u32 p_addr, q_addr;
+      u64 p_ptrn_0, p_ptrn_3, q_ptrn_0, q_ptrn_3;
+
       if (net->freed_len >= 2) {
         p_addr = net->freed[--net->freed_len];
         q_addr = net->freed[--net->freed_len];
@@ -453,33 +454,114 @@ void rewrite(Net* net, u32 a_addr_input) {
         net->nodes_len += 8;
       }
 
-      u64 p_ptrn_0 = p_addr << 2;
-      u64 q_ptrn_0 = q_addr << 2;
+      p_ptrn_0 = p_addr << 2;
+      p_ptrn_3 = p_ptrn_0 + 3;
+
+      q_ptrn_0 = q_addr << 2;
+      q_ptrn_3 = q_ptrn_0 + 3;
+
 
       for (int i = 0; i < 3; i++) {
         // TODO: Test if it is faster to just store values in a variable and reuse them
         net->nodes[p_ptrn_0 + i] = p_ptrn_0 + i;
         net->nodes[q_ptrn_0 + i] = q_ptrn_0 + i;
       }
-      net->nodes[p_ptrn_0 + 3] = (b_kind << 6) + ((b_type & 0x7) << 3);
-      net->nodes[q_ptrn_0 + 3] = (a_kind << 6) + ((a_type & 0x7) << 3);
+      net->nodes[p_ptrn_3] = (b_kind << 6) + ((b_type & 0x7) << 3);
+      net->nodes[q_ptrn_3] = (a_kind << 6) + ((a_type & 0x7) << 3);
 
+      u64 a_ptrn, b_ptrn;
+      u32 a_numb, b_numb;
 
-      link_ports(net, Pointer(b_addr, 0), enter_port(net, Pointer(a_addr, 1)));
-      link_ports(net, Pointer(p_addr, 0), enter_port(net, Pointer(a_addr, 2)));
-      link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(b_addr, 1)));
-      link_ports(net, Pointer(q_addr, 0), enter_port(net, Pointer(b_addr, 2)));
-      link_ports(net, Pointer(a_addr, 1), Pointer(b_addr, 1));
-      link_ports(net, Pointer(q_addr, 1), Pointer(b_addr, 2));
-      link_ports(net, Pointer(a_addr, 2), Pointer(p_addr, 1));
-      link_ports(net, Pointer(q_addr, 2), Pointer(p_addr, 2));
+      //link_ports(net, Pointer(b_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+      u64 enter_a1 = net->nodes[a_ptrn_0 + 1];
+      u32 enter_a1_numb = (na_p3 >> 1) & 1;//is_numeric(net, a_addr, 1);
+
+      if (enter_a1_numb) {
+         enter_a1 += (u64)0x100000000;
+      } else {
+        set_port(net, addr_of(enter_a1), slot_of(enter_a1), b_ptrn_0);
+      }
+      set_port(net, addr_of(b_ptrn_0), slot_of(b_ptrn_0), enter_a1);
+
+      if (enter_a1_numb || slot_of(enter_a1) == 0) {
+        net->redex[net->redex_len++] = b_addr;
+      }
+
+      //link_ports(net, Pointer(p_addr, 0), enter_port(net, Pointer(a_addr, 2)));
+      u64 enter_a2 = net->nodes[a_ptrn_0 + 2];
+      u32 enter_a2_numb = (na_p3 >> 2) & 1;//is_numeric(net, a_addr, 2);
+
+      if (enter_a2_numb) {
+        enter_a2 += (u64)0x100000000;
+      } else {
+        set_port(net, addr_of(enter_a2), slot_of(enter_a2), p_ptrn_0);
+      }
+      set_port(net, addr_of(p_ptrn_0), slot_of(p_ptrn_0), enter_a2);
+
+      if (enter_a2_numb || slot_of(enter_a2) == 0) {
+        net->redex[net->redex_len++] = p_addr;
+      }
+
+      //link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(b_addr, 1)));
+      a_ptrn = a_ptrn_0;
+      b_ptrn = net->nodes[b_ptrn_0 + 1];
+
+      a_numb = 0;
+      b_numb = (nb_p3 >> 1) & 1;
+
+      if (b_numb) {
+        b_ptrn += (u64)0x100000000;
+      } else {
+        set_port(net, addr_of(b_ptrn), slot_of(b_ptrn), a_ptrn);
+      }
+      set_port(net, addr_of(a_ptrn), slot_of(a_ptrn), b_ptrn);
+
+      if (b_numb || slot_of(b_ptrn) == 0) {
+        net->redex[net->redex_len++] = a_addr;
+      }
+
+      //link_ports(net, Pointer(q_addr, 0), enter_port(net, Pointer(b_addr, 2)));
+      a_ptrn = q_ptrn_0;
+      b_ptrn = net->nodes[b_ptrn_0 + 2];
+
+      a_numb = 0;
+      b_numb = (nb_p3 >> 2) & 1;
+
+      if (b_numb) {
+        b_ptrn += (u64)0x100000000;
+      } else {
+        set_port(net, addr_of(b_ptrn), slot_of(b_ptrn), a_ptrn);
+      }
+      set_port(net, addr_of(a_ptrn), slot_of(a_ptrn), b_ptrn);
+
+      if (b_numb || slot_of(b_ptrn) == 0) {
+        net->redex[net->redex_len++] = q_addr;
+      }
+
+      //link_ports(net, Pointer(a_addr, 1), Pointer(b_addr, 1));
+      set_port(net, a_addr, 1, b_ptrn_0 + 1);
+      set_port(net, b_addr, 1, a_ptrn_0 + 1);
+
+      //link_ports(net, Pointer(q_addr, 1), Pointer(b_addr, 2));
+      set_port(net, q_addr, 1, b_ptrn_0 + 2);
+      set_port(net, b_addr, 2, q_ptrn_0 + 1);
+
+      //link_ports(net, Pointer(a_addr, 2), Pointer(p_addr, 1));
+      set_port(net, a_addr, 2, p_ptrn_0 + 1);
+      set_port(net, p_addr, 1, a_ptrn_0 + 2);
+
+      //link_ports(net, Pointer(q_addr, 2), Pointer(p_addr, 2));
+      set_port(net, q_addr, 2, p_ptrn_0 + 2);
+      set_port(net, p_addr, 2, q_ptrn_0 + 2);
 
     // UnaryDuplication
     } else if
       (  (a_type == NOD && b_type == OP1)
       || (a_type == ITE && b_type == OP1)) {
 
-      u32 c_addr;// = alloc_node(net, b_type, b_kind);
+      u32 c_addr;
+      u64 c_ptrn_0, c_ptrn_3;
+
       if (net->freed_len > 0) {
         c_addr = net->freed[--net->freed_len];
       }
@@ -487,11 +569,15 @@ void rewrite(Net* net, u32 a_addr_input) {
         c_addr = net->nodes_len >> 2;
         net->nodes_len += 4;
       }
-      u64 c_ptrn_0 = c_addr << 2;
+
+      c_ptrn_0 = c_addr << 2;
+      c_ptrn_3 = c_ptrn_0 + 3;
+
       net->nodes[c_ptrn_0] = c_ptrn_0;
       net->nodes[c_ptrn_0 + 1] = c_ptrn_0 + 1;
       net->nodes[c_ptrn_0 + 2] = c_ptrn_0 + 2;
-      net->nodes[c_ptrn_0 + 3] = (b_kind << 6) + ((b_type & 0x7) << 3);
+      net->nodes[c_ptrn_3] = (b_kind << 6) + ((b_type & 0x7) << 3);
+
 
       link_ports(net, Pointer(b_addr, 0), enter_port(net, Pointer(a_addr, 1)));
       link_ports(net, Pointer(c_addr, 0), enter_port(net, Pointer(a_addr, 2)));

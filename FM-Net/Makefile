@@ -15,4 +15,4 @@ debug:
 
 .PHONY: clean
 clean:
-	rm -rfv test debug_test  $(SRC:.c=.o)
+	rm -rfv test debug_test test_inlined $(SRC:.c=.o)
