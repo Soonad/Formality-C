@@ -410,10 +410,12 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       QUAL_DEBUG unlink_port<cmd::aux1_of_node>(a_addr);
       if (fst == 0) { // fst == cond_val
         net.template link_ports<cmd::aux2_of_node, cmd::target_of_aux2>(a_addr, a_addr);
+        net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(a_addr, a_addr);
       }
       else {
         net.template link_ports<cmd::aux1_of_node, cmd::target_of_aux2>(a_addr, a_addr);
         QUAL_DEBUG unlink_port<cmd::aux2_of_node>(a_addr);
+        net.template link_ports<cmd::aux2_of_node, cmd::aux2_of_node>(a_addr, a_addr);
       }
     } else {
       printf("[ERROR](%u) Invalid interaction, node type: %d, node addr: 0x%p\n", cfg::counter, a_type, a_addr);
