@@ -50,8 +50,6 @@ template<typename PortPtrTy, typename NumTy> union PortTy {
 // `nodes` array **shall* be aligned on (sizeof(StorageTy)*4)-bytes boundary, i.e we may compute port number from the
 // pointer value
 struct config_i32array {
-  // GAGO_DEBUG
-  static inline size_t counter = 0;
 
   static constexpr int nsz = sizeof(int);
   typedef int StorageTy;
@@ -267,7 +265,7 @@ struct config_i32array {
   }
 
   template <cmd c>
-  // static // we don't modify `redex` here, hence `static`
+  STATIC // we don't modify `redex` here, hence `static`
   int put_port_to_port(StorageTy* p, const StorageTy* port_addr) {
     StorageTy* pp = port_ptr<c>(p);
     *pp = StorageTy(port_addr - pp);
@@ -292,7 +290,7 @@ struct config_i32array {
   }
 
   template <cmd c>
-  // static // FOR DEBUG ONLY
+  STATIC
   void unlink_port(StorageTy * p) {
 #if 1
     static_assert(c <= cmd::immediate, "unlink_port is defined for explicitly addressed ports only");
@@ -337,7 +335,6 @@ struct config_i32array {
       }
       else {
         if (a_slot == 0 && b_slot == 0) {
-
           net.redex[net.redex_len++] = node_ptr<lcmd>(aptr);
         }
       }
@@ -383,17 +380,15 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       net.template link_port_to_number<cmd::target_of_aux2>(a_addr, res);
       // GAGO_OPT_UNLINK create unlink_port immediate variant and rewrite this (and further down)!
       // Review all unlink usages
-      // #define QUAL_DEBUG cfg::template
-      #define QUAL_DEBUG net.template
-      QUAL_DEBUG unlink_port<cmd::prim_of_node>(a_addr); // SHOULDN'T HAVE THIS
-      QUAL_DEBUG unlink_port<cmd::aux2_of_node>(a_addr);
+      // QUAL unlink_port<cmd::prim_of_node>(a_addr); // SHOULDN'T HAVE THIS
+      QUAL unlink_port<cmd::aux2_of_node>(a_addr);
       net.free_node(a_addr);
 
     // BinaryOperation
     } else if (a_type == OP2) {
       cfg::template set_type<OP1>(a_addr);
       net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(a_addr, a_addr);
-      QUAL_DEBUG unlink_port<cmd::aux1_of_node>(a_addr);
+      QUAL unlink_port<cmd::aux1_of_node>(a_addr);
       net.template link_port_to_number<cmd::aux1_of_node>(a_addr, fst);
 
     // NumberDuplication
@@ -407,18 +402,20 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       cfg::template set_type<NOD>(a_addr);
       // link to pair_ptr
       net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(a_addr, a_addr);
-      QUAL_DEBUG unlink_port<cmd::aux1_of_node>(a_addr);
+      QUAL unlink_port<cmd::aux1_of_node>(a_addr);
       if (fst == 0) { // fst == cond_val
         net.template link_ports<cmd::aux2_of_node, cmd::target_of_aux2>(a_addr, a_addr);
-        net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(a_addr, a_addr);
+        // net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(a_addr, a_addr);
+        net.template clean_port<cmd::aux1_of_node>(a_addr);
       }
       else {
         net.template link_ports<cmd::aux1_of_node, cmd::target_of_aux2>(a_addr, a_addr);
-        QUAL_DEBUG unlink_port<cmd::aux2_of_node>(a_addr);
-        net.template link_ports<cmd::aux2_of_node, cmd::aux2_of_node>(a_addr, a_addr);
+        QUAL unlink_port<cmd::aux2_of_node>(a_addr);
+        // net.template link_ports<cmd::aux2_of_node, cmd::aux2_of_node>(a_addr, a_addr);
+        net.template clean_port<cmd::aux2_of_node>(a_addr);
       }
     } else {
-      printf("[ERROR](%u) Invalid interaction, node type: %d, node addr: 0x%p\n", cfg::counter, a_type, a_addr);
+      printf("[ERROR] Invalid interaction, node type: %d, node addr: 0x%p\n", a_type, a_addr);
     }
 
   } else {
@@ -433,28 +430,15 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       || (a_type == OP2 && b_type == OP2)
       || (a_type == ITE && b_type == ITE)) {
 
-      // *SIMULTANOEUSLY GOING INTO POINTERS MESSES THINGS UP??? FIXME???
-      // if (!cfg::template is_numeric<cmd::aux1_of_node>(a_addr) && !cfg::template is_numeric<cmd::aux1_of_node>(b_addr)) {
-      //   auto ta1 = cfg::template get_port<cmd::aux1_of_node>(a_addr);
-      //   auto tb1 = cfg::template get_port<cmd::aux1_of_node>(b_addr);
-      //   net.template link_ports<cmd::immediate, cmd::immediate>(ta1, tb1);
-      // }
-      // else
-        net.template link_ports<cmd::target_of_aux1, cmd::target_of_aux1>(a_addr, b_addr);
-      // if (!cfg::template is_numeric<cmd::aux2_of_node>(a_addr) && !cfg::template is_numeric<cmd::aux2_of_node>(b_addr)) {
-      //   auto ta2 = cfg::template get_port<cmd::aux2_of_node>(a_addr);
-      //   auto tb2 = cfg::template get_port<cmd::aux2_of_node>(b_addr);
-      //   net.template link_ports<cmd::immediate, cmd::immediate>(ta2, tb2);
-      // }
-      // else
-        net.template link_ports<cmd::target_of_aux2, cmd::target_of_aux2>(a_addr, b_addr);
+      net.template link_ports<cmd::target_of_aux1, cmd::target_of_aux1>(a_addr, b_addr);
+      net.template link_ports<cmd::target_of_aux2, cmd::target_of_aux2>(a_addr, b_addr);
       
-      QUAL_DEBUG unlink_port<cmd::prim_of_node>(a_addr);
-      QUAL_DEBUG unlink_port<cmd::prim_of_node>(b_addr);
-      QUAL_DEBUG unlink_port<cmd::aux1_of_node>(a_addr);
-      QUAL_DEBUG unlink_port<cmd::aux1_of_node>(b_addr);
-      QUAL_DEBUG unlink_port<cmd::aux2_of_node>(a_addr);
-      QUAL_DEBUG unlink_port<cmd::aux2_of_node>(b_addr);
+      QUAL unlink_port<cmd::prim_of_node>(a_addr);
+      QUAL unlink_port<cmd::prim_of_node>(b_addr);
+      QUAL unlink_port<cmd::aux1_of_node>(a_addr);
+      QUAL unlink_port<cmd::aux1_of_node>(b_addr);
+      QUAL unlink_port<cmd::aux2_of_node>(a_addr);
+      QUAL unlink_port<cmd::aux2_of_node>(b_addr);
       net.free_node(a_addr);
       if (a_addr != b_addr) {
         net.free_node(b_addr);
@@ -502,7 +486,6 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       // Reuse b for q, a for s (defined above ^)
       // below the lists of all available ports are laid down for each step (prepended with ++),
       // original steps are simply copypasted
-
       // FIXME!!! OPTIMIZE!, SHOULD look if b ports are numeric
       // a0, b0, p0, p1, p2
       net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(p_addr, a_addr);  // 4
@@ -530,7 +513,7 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       rewrite<cfg>(net, b_addr);
     // InvalidInteraction
     } else {
-      printf("[ERROR](%u) Invalid interaction at: %d bt: %d ak: %d bk: %d.\n", cfg::counter, a_type, b_type, a_kind, b_kind);
+      printf("[ERROR] Invalid interaction at: %d bt: %d ak: %d bk: %d.\n", a_type, b_type, a_kind, b_kind);
     }
   }
 }
@@ -552,11 +535,9 @@ Stats reduce(config_i32array& cfg) {
   while (cfg.net.redex_len > 0) {
     for (u32 i = 0, l = cfg.net.redex_len; i < l; ++i) {
       rewrite_i32array(cfg, cfg.net.redex[--cfg.net.redex_len]);
-      cfg.counter++;
       ++stats.rewrites;
     }
     ++stats.loops;
-    printf("%u loops, %u rewrites\n", stats.loops, stats.rewrites);
   }
   return stats;
 }
@@ -622,7 +603,7 @@ int main (int argc, char * argv[]) {
   cfg.net.redex = reinterpret_cast<int**>(malloc(sizeof(int*) * 10000000));
   cfg.net.freed = reinterpret_cast<int**>(malloc(sizeof(int*) * 10000000));
 
-  // printf("NET: 0x%p\n", cfg.net.nodes); // GAGO_DEBUG
+  // printf("NET: 0x%p\n", cfg.net.nodes);
 
   cfg.net.nodes_len = 0;
   cfg.net.redex_len = 0;
