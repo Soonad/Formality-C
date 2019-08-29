@@ -651,7 +651,9 @@ int main (int argc, char * argv[]) {
   }
 
   find_redexes(cfg);
+  clock_t temp = clock();
   Stats stats = reduce(cfg);
+  printf("computed in %d msecs.\n", clock()-temp);
 
   // Must output 44067986
   printf("rewrites: %d\n", stats.rewrites);

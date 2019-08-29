@@ -7,6 +7,7 @@
 
 #include <cstring>
 #include <cassert>
+#include <time.h>
 
 #define u32 uint32_t
 

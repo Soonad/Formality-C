@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 #define u32 uint32_t
 #define u64 uint64_t
@@ -453,7 +454,9 @@ int main () {
   }
 
   find_redexes(&net);
+  clock_t temp = clock();
   Stats stats = reduce(&net);
+  printf("computed in %d msecs.\n", clock()-temp);
 
   // Must output 44067986
   printf("rewrites: %d\n", stats.rewrites);
