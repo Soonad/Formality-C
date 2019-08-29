@@ -3,14 +3,14 @@
 enum class cmd {
   // port of Node addr
     prim_of_node
+  , aux0_of_node
   , aux1_of_node
-  , aux2_of_node
   // immediate port
   , immediate
   // targets
   , target_of_prim
+  , target_of_aux0
   , target_of_aux1
-  , target_of_aux2
   //
   , target_of_immediate
 };
@@ -386,7 +386,7 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
 
     // UnaryOperation
     if (a_type == OP1) {
-      const auto snd = cfg::template get_number<cmd::aux1_of_node>(a_addr);
+      const auto snd = cfg::template get_number<cmd::aux0_of_node>(a_addr);
       typename cfg::NumTy res;
       switch (a_kind) {
         case  0: res = fst + snd; break;
@@ -407,42 +407,42 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
         case 15: res = fst == snd ? 1 : 0; break;
         default: res = 0; printf("[ERROR] Invalid interaction 1.\n"); break;
       }
-      net.template link_port_to_number<cmd::target_of_aux2>(a_addr, res);
+      net.template link_port_to_number<cmd::target_of_aux1>(a_addr, res);
       // GAGO_OPT_UNLINK create unlink_port immediate variant and rewrite this (and further down)!
       // Review all unlink usages
       // QUAL unlink_port<cmd::prim_of_node>(a_addr); // SHOULDN'T HAVE THIS
-      QUAL unlink_port<cmd::aux2_of_node>(a_addr);
+      QUAL unlink_port<cmd::aux1_of_node>(a_addr);
       net.free_node(a_addr);
 
     // BinaryOperation
     } else if (a_type == OP2) {
       cfg::template set_type<OP1>(a_addr);
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(a_addr, a_addr);
-      QUAL unlink_port<cmd::aux1_of_node>(a_addr);
-      net.template link_port_to_number<cmd::aux1_of_node>(a_addr, fst);
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux0>(a_addr, a_addr);
+      QUAL unlink_port<cmd::aux0_of_node>(a_addr);
+      net.template link_port_to_number<cmd::aux0_of_node>(a_addr, fst);
 
     // NumberDuplication
     } else if (a_type == NOD) {
+      net.template link_port_to_number<cmd::target_of_aux0>(a_addr, fst);
       net.template link_port_to_number<cmd::target_of_aux1>(a_addr, fst);
-      net.template link_port_to_number<cmd::target_of_aux2>(a_addr, fst);
       net.free_node(a_addr);
 
     // IfThenElse
     } else if (a_type == ITE) {
       cfg::template set_type<NOD>(a_addr);
       // link to pair_ptr
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(a_addr, a_addr);
-      QUAL unlink_port<cmd::aux1_of_node>(a_addr);
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux0>(a_addr, a_addr);
+      QUAL unlink_port<cmd::aux0_of_node>(a_addr);
       if (fst == 0) { // fst == cond_val
-        net.template link_ports<cmd::aux2_of_node, cmd::target_of_aux2>(a_addr, a_addr);
-        // net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(a_addr, a_addr);
-        net.template clean_port<cmd::aux1_of_node>(a_addr);
+        net.template link_ports<cmd::aux1_of_node, cmd::target_of_aux1>(a_addr, a_addr);
+        // net.template link_ports<cmd::aux0_of_node, cmd::aux0_of_node>(a_addr, a_addr);
+        net.template clean_port<cmd::aux0_of_node>(a_addr);
       }
       else {
-        net.template link_ports<cmd::aux1_of_node, cmd::target_of_aux2>(a_addr, a_addr);
-        QUAL unlink_port<cmd::aux2_of_node>(a_addr);
-        // net.template link_ports<cmd::aux2_of_node, cmd::aux2_of_node>(a_addr, a_addr);
-        net.template clean_port<cmd::aux2_of_node>(a_addr);
+        net.template link_ports<cmd::aux0_of_node, cmd::target_of_aux1>(a_addr, a_addr);
+        QUAL unlink_port<cmd::aux1_of_node>(a_addr);
+        // net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(a_addr, a_addr);
+        net.template clean_port<cmd::aux1_of_node>(a_addr);
       }
     } else {
       printf("[ERROR] Invalid interaction, node type: %d, node addr: 0x%p\n", a_type, a_addr);
@@ -460,15 +460,15 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       || (a_type == OP2 && b_type == OP2)
       || (a_type == ITE && b_type == ITE)) {
 
+      net.template link_ports<cmd::target_of_aux0, cmd::target_of_aux0>(a_addr, b_addr);
       net.template link_ports<cmd::target_of_aux1, cmd::target_of_aux1>(a_addr, b_addr);
-      net.template link_ports<cmd::target_of_aux2, cmd::target_of_aux2>(a_addr, b_addr);
       
       QUAL unlink_port<cmd::prim_of_node>(a_addr);
       QUAL unlink_port<cmd::prim_of_node>(b_addr);
+      QUAL unlink_port<cmd::aux0_of_node>(a_addr);
+      QUAL unlink_port<cmd::aux0_of_node>(b_addr);
       QUAL unlink_port<cmd::aux1_of_node>(a_addr);
       QUAL unlink_port<cmd::aux1_of_node>(b_addr);
-      QUAL unlink_port<cmd::aux2_of_node>(a_addr);
-      QUAL unlink_port<cmd::aux2_of_node>(b_addr);
       net.free_node(a_addr);
       if (a_addr != b_addr) {
         net.free_node(b_addr);
@@ -491,21 +491,21 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
 
       // FIXME!!! OPTIMIZE!, SHOULD look if q ports are numeric
       //++ a0, b0, p0, p1, p2, r0, r1, r2
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(p_addr, a_addr);  // 4
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux0>(p_addr, a_addr);  // 4
       //++ a0, b0, a1, p1, p2, r0, r1, r2
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux2>(q_addr, a_addr);  // 5 b_addr is reused instead of q_addr (b0 is available)
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(q_addr, a_addr);  // 5 b_addr is reused instead of q_addr (b0 is available)
       //++ a0, a2, a1, p1, p2, r0, r1, r2
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(r_addr, b_addr);  // 6
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux0>(r_addr, b_addr);  // 6
       //++ a0, a2, a1, p1, p2, b1, r1, r2
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux2>(s_addr, b_addr);  // 7 a_addr is reused instead of s_addr (a0 is available)
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(s_addr, b_addr);  // 7 a_addr is reused instead of s_addr (a0 is available)
       //++ b2, a2, a1, p1, p2, b1, r1, r2
-      net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(r_addr, p_addr);    // 0
+      net.template link_ports<cmd::aux0_of_node, cmd::aux0_of_node>(r_addr, p_addr);    // 0
       //++ b2, a2, a1, p2, b1, r2
-      net.template link_ports<cmd::aux1_of_node, cmd::aux2_of_node>(s_addr, p_addr);    // 1 a_addr is reused instead of s_addr (a1 is available)
+      net.template link_ports<cmd::aux0_of_node, cmd::aux1_of_node>(s_addr, p_addr);    // 1 a_addr is reused instead of s_addr (a1 is available)
       //++ b2, a2, b1, r2
-      net.template link_ports<cmd::aux2_of_node, cmd::aux1_of_node>(r_addr, q_addr);    // 2 b_addr is reused instead of q_addr (b1 is available)
+      net.template link_ports<cmd::aux1_of_node, cmd::aux0_of_node>(r_addr, q_addr);    // 2 b_addr is reused instead of q_addr (b1 is available)
       //++ b2, a2
-      net.template link_ports<cmd::aux2_of_node, cmd::aux2_of_node>(s_addr, q_addr);    // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
+      net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(s_addr, q_addr);    // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
 
     // UnaryDuplication
     } else if
@@ -518,19 +518,19 @@ void rewrite(cfg & net, typename cfg::StorageTy * a_addr) {
       // original steps are simply copypasted
       // FIXME!!! OPTIMIZE!, SHOULD look if b ports are numeric
       // a0, b0, p0, p1, p2
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(p_addr, a_addr);  // 4
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux0>(p_addr, a_addr);  // 4
       // a0, b0, a1, p1, p2
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux2>(q_addr, a_addr);  // 5 b_addr is reused instead of q_addr (b0 is available)
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(q_addr, a_addr);  // 5 b_addr is reused instead of q_addr (b0 is available)
       // a0, a2, a1, p1, p2
-      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux2>(s_addr, b_addr);  // 6 a_addr is reused instead of s_addr (a0 is available)
+      net.template link_ports<cmd::prim_of_node, cmd::target_of_aux1>(s_addr, b_addr);  // 6 a_addr is reused instead of s_addr (a0 is available)
       // b2, a2, a1, p1, p2
-      net.template link_ports<cmd::aux1_of_node, cmd::target_of_aux1>(p_addr, b_addr);  // 0
+      net.template link_ports<cmd::aux0_of_node, cmd::target_of_aux0>(p_addr, b_addr);  // 0
       // b2, a2, a1, b1, p2
-      // net.template link_ports<cmd::aux1_of_node, cmd::target_of_aux1>(q_addr, b_addr);  // 1 collapsed since b is q
+      // net.template link_ports<cmd::aux0_of_node, cmd::target_of_aux0>(q_addr, b_addr);  // 1 collapsed since b is q
       // b2, a2, a1, p2
-      net.template link_ports<cmd::aux1_of_node, cmd::aux2_of_node>(s_addr, p_addr);    // 2 a_addr is reused instead of s_addr (a1 is available)
+      net.template link_ports<cmd::aux0_of_node, cmd::aux1_of_node>(s_addr, p_addr);    // 2 a_addr is reused instead of s_addr (a1 is available)
       // b2, a2
-      net.template link_ports<cmd::aux2_of_node, cmd::aux2_of_node>(s_addr, q_addr);    // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
+      net.template link_ports<cmd::aux1_of_node, cmd::aux1_of_node>(s_addr, q_addr);    // 3 a_addr is reused instead of s_addr b_addr is reused instead of q_addr
 
       #undef q_addr
       #undef s_addr
@@ -576,7 +576,7 @@ void find_redexes(config_i32array& cfg) {
   cfg.net.redex_len = 0;
   for (u32 i = 0; i < cfg.net.nodes_len / 4; ++i) {
     int* node_ptr = cfg.net.nodes + size_t(i) * 4;
-    if (config_i32array::template is_numeric<cmd::aux1_of_node>(node_ptr) || (config_i32array::template node_ptr<cmd::immediate>(config_i32array::template get_port<cmd::prim_of_node>(node_ptr)) >= node_ptr)) {
+    if (config_i32array::template is_numeric<cmd::aux0_of_node>(node_ptr) || (config_i32array::template node_ptr<cmd::immediate>(config_i32array::template get_port<cmd::prim_of_node>(node_ptr)) >= node_ptr)) {
       if (config_i32array::is_redex(node_ptr))
         cfg.net.redex[cfg.net.redex_len++] = node_ptr;
     }
