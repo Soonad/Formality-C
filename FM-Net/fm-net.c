@@ -651,9 +651,9 @@ void rewrite(Net* net, u32 a_addr_input) {
 
      // UnaryOperation
      if (a_type == OP1) {
-       u64 dst = enter_port(net, Pointer(a_addr, 2));
+       u64 dst = net->nodes[a_ptrn_0 + 2];
        u32 fst = numb_of(b_ptrn);
-       u32 snd = numb_of(enter_port(net, Pointer(a_addr, 1)));
+       u32 snd = numb_of(net->nodes[a_ptrn_0 + 1]);
        u64 res;
        switch (a_kind) {
          case  0: res = Numeric(fst + snd); break;
@@ -674,13 +674,32 @@ void rewrite(Net* net, u32 a_addr_input) {
          case 15: res = Numeric(fst == snd ? 1 : 0); break;
          default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
        }
-       link_ports(net, dst, res);
-       unlink_port(net, Pointer(a_addr, 0));
-       unlink_port(net, Pointer(a_addr, 2));
+       //link_ports(net, dst, res); //dst = not_num, res = num
+       set_port(net, addr_of(dst), slot_of(dst), res);
+       if (slot_of(dst) == 0) {
+         net->redex[net->redex_len++] = addr_of(dst);
+       }
+
+       u64 aux_ptrn;
+       //unlink_port(net, Pointer(a_addr, 0));
+       aux_ptrn = get_port(net, a_addr, 0);
+       if (type_of(aux_ptrn) == PTR && get_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn)) == a_ptrn_0) {
+         //set_port(net, a_addr, 0, a_ptrn_0); --> not needed since a_addr will be freed
+         set_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn), aux_ptrn);
+       }
+
+       //unlink_port(net, Pointer(a_addr, 2));
+       aux_ptrn = get_port(net, a_addr, 2);
+       if (type_of(aux_ptrn) == PTR && get_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn)) == a_ptrn_0 + 2) {
+         //set_port(net, a_addr, 2, a_ptrn_0 + 2); --> not needed since a_addr will be freed
+         set_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn), aux_ptrn);
+       }
+
        free_node(net, a_addr);
 
      // BinaryOperation
      } else if (a_type == OP2) {
+       //b_ptrn += (u64)0x100000000;
        set_type(net, a_addr, OP1);
        link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(a_addr, 1)));
        unlink_port(net, Pointer(a_addr, 1));
@@ -688,12 +707,14 @@ void rewrite(Net* net, u32 a_addr_input) {
 
      // NumberDuplication
      } else if (a_type == NOD) {
+       //b_ptrn += (u64)0x100000000;
        link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
        link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 2)));
        free_node(net, a_addr);
 
      // IfThenElse
      } else if (a_type == ITE) {
+       //b_ptrn += (u64)0x100000000;
        u32 cond_val = numb_of(b_ptrn) == 0;
        u64 pair_ptr = enter_port(net, Pointer(a_addr, 1));
        set_type(net, a_addr, NOD);
