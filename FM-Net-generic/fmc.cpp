@@ -176,14 +176,45 @@ struct config_i32array {
 
   template <cmd c>
   static
+  void set_port(StorageTy* p, const StorageTy* port_addr) {
+    StorageTy* pp = port_ptr<c>(p);
+    *pp = StorageTy(port_addr - pp);
+  }
+
+  template <cmd c>
+  static
   NumTy get_number(StorageTy* p) {
     return NumTy(*port_ptr<c>(p));
   }
 
   template <cmd c>
   static
+  void set_number(StorageTy* p, NumTy num) {
+    *reinterpret_cast<NumTy*>(port_ptr<c>(p)) = num;
+  }
+
+  template <cmd c>
+  static
   bool is_numeric(const StorageTy* p) {
     return (info_ptr<c>(p)->is_num >> slot_of<c>(p)) & 1;
+  }
+
+  // Conversion from reference representation
+  // src is *node* address!
+  template <unsigned n>
+  static
+  void convert_from_ref_repr(StorageTy* dst, const u32 ndx, const u32* src_) {
+    static_assert(n <= INFO, "wrong offset for convert_from_ref_repr");
+    const StorageTy * src = reinterpret_cast<const StorageTy*>(src_);
+    if constexpr(n == INFO) {
+      dst[n] = src[n];
+    }
+    else {
+      if (is_numeric<cmd(n)>(src))
+        dst[n] = src[n];
+      else
+        dst[n] = src[n] - (ndx + n);
+    }
   }
 
   static
@@ -252,7 +283,7 @@ struct config_i32array {
 
   template <cmd c>
   void put_number_to_port(StorageTy* p, NumTy num) {
-    *reinterpret_cast<NumTy*>(port_ptr<c>(p)) = num;
+    set_number<c>(p, num);
     const int slot = slot_of<c>(p);
     info_ptr<c>(p)->is_num |= (1 << slot);
     if constexpr (c == cmd::prim_of_node) {
@@ -267,8 +298,7 @@ struct config_i32array {
   template <cmd c>
   STATIC // we don't modify `redex` here, hence `static`
   int put_port_to_port(StorageTy* p, const StorageTy* port_addr) {
-    StorageTy* pp = port_ptr<c>(p);
-    *pp = StorageTy(port_addr - pp);
+    set_port<c>(p, port_addr);
     const int slot = slot_of<c>(p);
     info_ptr<c>(p)->is_num &= ~(1 << slot);
     // redex update is moved to link_ports
@@ -612,24 +642,11 @@ int main (int argc, char * argv[]) {
   for (u32 i = 0; i < sizeof(nodes) / sizeof(u32); i += 4) {
     // Translate from their representation to ours
     int* curr_node = cfg.net.nodes + i;
-    const int* sp = reinterpret_cast<const int*>(nodes + i);
-
-    if (!config_i32array::is_numeric<cmd::prim_of_node>(sp))
-      curr_node[0] = int(nodes[i]) - i; // GAGO_DIRTY
-    else
-      curr_node[0] = nodes[i];
-
-    if (!config_i32array::is_numeric<cmd::aux1_of_node>(sp))
-      curr_node[1] = int(nodes[i + 1]) - (i + 1); // GAGO_DIRTY
-    else
-      curr_node[1] = nodes[i + 1];
-
-    if (!config_i32array::is_numeric<cmd::aux2_of_node>(sp))
-      curr_node[2] = int(nodes[i + 2]) - (i + 2); // GAGO_DIRTY
-    else
-      curr_node[2] = nodes[i + 2];
-
-    curr_node[3] = nodes[i + 3];
+    auto src = nodes + i;
+    config_i32array::convert_from_ref_repr<0>(curr_node, i, src);
+    config_i32array::convert_from_ref_repr<1>(curr_node, i, src);
+    config_i32array::convert_from_ref_repr<2>(curr_node, i, src);
+    config_i32array::convert_from_ref_repr<3>(curr_node, i, src);
     cfg.net.nodes_len += 4;
   }
 
