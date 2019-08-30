@@ -1,0 +1,22 @@
+Here is a sketch of how it might look when webassembly is used.
+
+The module is self-contained and exports `process` entry-point having the following type:
+
+int process(
+    u32 * nodes
+  , u32 nodes_len
+  , void * work_arena
+  , unsigned max_nodes
+  , unsigned max_redexes
+  );
+
+Javascript host shall pass an array of nodes `nodes` and it's length `nodes_len` (number_of_nodes * 4) and also allocate work buffer `work_arena` big enough for algorithm to proceed (it's size shall be no less than 16 + sizeof(int) * max_nodes + sizeof(*int) * max_redexes + sizeof(*int) * max_freed, max_freed isn't given as a parameter to the function).
+
+`process` returns status — 0 (ok) or non-zero (failure). When succeeded `nodes` shall contain reduced net.
+
+
+Some afterthoughts:
+
+Since the reference representation is inherently tied to underlying architecture, for 32-bit pointer architectures (which wasm32 is) it might be simpler and faster to directly use pointers to represent port addresses and use pointer tagging when distinguishing between immediate numbers and port addresses (not using separate bitmask for indicating if the field is a port address or an immediate number), this way we lose 1 bit in numbers (which now are 31-bits numbers) but have much simpler code and need *much* less modifications to reference implementation to make it faster.
+
+Even if not using real pointers for ports, on 32-bit architectures we may only slighlty modify reference implementation to use pointer tagging analogue: the least significant bit differentiates between immediate number or port index (value is 1-bit left shifted before), the value itself is obtained by 1-bit right shift after.
