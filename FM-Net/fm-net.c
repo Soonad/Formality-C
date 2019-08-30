@@ -735,9 +735,32 @@ void rewrite(Net* net, u32 a_addr_input) {
 
      // NumberDuplication
      } else if (a_type == NOD) {
-       link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
-       link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 2)));
-       free_node(net, a_addr);
+       u64 aux_ptrn;
+
+       //link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
+       aux_ptrn = enter_port(net, Pointer(a_addr, 1));
+       if (!is_numeric(net, a_addr, 1)) {
+         set_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn), b_ptrn);
+         if (slot_of(aux_ptrn) == 0) {
+           net->redex[net->redex_len++] = addr_of(aux_ptrn);
+         }
+       }
+
+       //link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 2)));
+       aux_ptrn = enter_port(net, Pointer(a_addr, 2));
+       if (!is_numeric(net, a_addr, 2)) {
+         set_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn), b_ptrn);
+         if (slot_of(aux_ptrn) == 0) {
+           net->redex[net->redex_len++] = addr_of(aux_ptrn);
+         }
+       }
+
+       //free_node(net, a_addr);
+       net->nodes[a_ptrn_0] = a_ptrn_0;
+       net->nodes[a_ptrn_0 + 1] = a_ptrn_0 + 1;
+       net->nodes[a_ptrn_0 + 2] = a_ptrn_0 + 2;
+       net->nodes[a_ptrn_0 + 3] = 0;
+       net->freed[net->freed_len++] = a_addr;
 
      // IfThenElse
      } else if (a_type == ITE) {
