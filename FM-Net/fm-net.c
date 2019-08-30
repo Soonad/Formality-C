@@ -651,9 +651,9 @@ void rewrite(Net* net, u32 a_addr_input) {
 
      // UnaryOperation
      if (a_type == OP1) {
-       u64 dst = net->nodes[a_ptrn_0 + 2];
-       u32 fst = numb_of(b_ptrn);//b_ptrn; //numb_of(b_ptrn);
-       u32 snd = numb_of(net->nodes[a_ptrn_0 + 1]);//net->nodes[a_ptrn_0 + 1]; //numb_of(net->nodes[a_ptrn_0 + 1]);
+       u64 dst = net->nodes[a_ptrn_0 + 2];//enter_port(net, Pointer(a_addr, 2));//net->nodes[a_ptrn_0 + 2];
+       u32 fst = numb_of(b_ptrn);
+       u32 snd = numb_of(enter_port(net, Pointer(a_addr, 1)));//numb_of(net->nodes[a_ptrn_0 + 1]);//net->nodes[a_ptrn_0 + 1]; //numb_of(net->nodes[a_ptrn_0 + 1]);
        u64 res;
        switch (a_kind) {
          case  0: res = Numeric(fst + snd); break;
@@ -675,10 +675,12 @@ void rewrite(Net* net, u32 a_addr_input) {
          default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
        }
 
-       //link_ports(net, dst, res); //dst = not_num, res = num
-       set_port(net, addr_of(dst), slot_of(dst), res);
-       if (slot_of(dst) == 0) {
-         net->redex[net->redex_len++] = addr_of(dst);
+       //link_ports(net, dst, res);
+       if (!is_numeric(net, a_addr, 2)) {
+         set_port(net, addr_of(dst), slot_of(dst), res);
+         if (slot_of(dst) == 0) {
+           net->redex[net->redex_len++] = addr_of(dst);
+         }
        }
 
        u64 aux_ptrn;
@@ -739,11 +741,16 @@ void rewrite(Net* net, u32 a_addr_input) {
 
        //link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 1)));
        aux_ptrn = enter_port(net, Pointer(a_addr, 1));
-       if (!is_numeric(net, a_addr, 1)) {
+       if (type_of(aux_ptrn) == NUM;) {
          set_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn), b_ptrn);
          if (slot_of(aux_ptrn) == 0) {
            net->redex[net->redex_len++] = addr_of(aux_ptrn);
          }
+       }
+
+       // If both are main ports, add this to the list of active pairs
+       if (!(b_numb) && (slot_of(b_ptrn) == 0)) {
+         net->redex[net->redex_len++] = addr_of(b_ptrn);
        }
 
        //link_ports(net, b_ptrn, enter_port(net, Pointer(a_addr, 2)));
@@ -764,11 +771,24 @@ void rewrite(Net* net, u32 a_addr_input) {
 
      // IfThenElse
      } else if (a_type == ITE) {
-       //b_ptrn += (u64)0x100000000;
        u32 cond_val = numb_of(b_ptrn) == 0;
-       u64 pair_ptr = enter_port(net, Pointer(a_addr, 1));
+       //u64 pair_ptr = enter_port(net, Pointer(a_addr, 1));
        set_type(net, a_addr, NOD);
-       link_ports(net, Pointer(a_addr, 0), pair_ptr);
+
+       u64 aux_ptrn, a_ptrn;
+       u32 aux_numb, a_numb;
+
+       //link_ports(net, Pointer(a_addr, 0), enter_port(net, Pointer(a_addr, 1)));
+       aux_ptrn = net->nodes[a_ptrn_0 + 1];
+       set_port(net, a_addr, 0, aux_ptrn);
+       if (!is_numeric(net, a_addr, 1)) {
+         set_port(net, addr_of(aux_ptrn), slot_of(aux_ptrn), a_ptrn_0);
+         if (slot_of(aux_ptrn) == 0) {
+           net->redex[net->redex_len++] = a_addr;
+         }
+       }
+
+
        unlink_port(net, Pointer(a_addr, 1));
        u64 dest_ptr = enter_port(net, Pointer(a_addr, 2));
        link_ports(net, Pointer(a_addr, cond_val ? 2 : 1), dest_ptr);
