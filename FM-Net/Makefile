@@ -5,14 +5,14 @@ SRC = main.c fm-net.c
 LDFLAGS = -lm
 
 default:
-	$(CC) $(CFLAGS) $(SRC) -o test $(LDFLAGS)
+	$(CC) $(CFLAGS) $(SRC) -o fm_net_default $(LDFLAGS)
 
-inline:
-	$(CC) $(CFLAGS) $(SRC) -o test_inlined $(LDFLAGS) -D_INLINED_REWRITE_
+legacy:
+	$(CC) $(CFLAGS) $(SRC) -o fm_net_legacy $(LDFLAGS) -D_LEGACY_REWRITE_
 
 debug:
-	$(CC) $(DFLAGS) $(SRC) -o debug_test $(LDFLAGS) -DDEBUG
+	$(CC) $(DFLAGS) $(SRC) -o fm_net_debug $(LDFLAGS) -D_LEGACY_REWRITE_
 
 .PHONY: clean
 clean:
-	rm -rfv test debug_test test_inlined $(SRC:.c=.o)
+	rm -rfv fm_net_default fm_net_legacy fm_net_debug $(SRC:.c=.o)
