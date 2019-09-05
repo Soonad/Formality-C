@@ -134,7 +134,7 @@ void unlink_port(Net* net, u64 a_ptrn) {
   }
 }
 
-inline void swap(u32* value1, u32* value2) {
+void swap(u32* value1, u32* value2) {
   if (value1 != value2) {
     u32 temp = *value1;
     *value1 = *value2;
@@ -144,7 +144,8 @@ inline void swap(u32* value1, u32* value2) {
 
 // Rewrites an active pair
 void rewrite(Net* net, u32 a_addr_input) {
-  #if !defined(_INLINED_REWRITE_)
+  #if defined(_LEGACY_REWRITE_)
+  u32 a_addr = a_addr_input;
   u64 b_ptrn = get_port(net, a_addr, 0);
 
   if (type_of(b_ptrn) == PTR) {
@@ -281,7 +282,7 @@ void rewrite(Net* net, u32 a_addr_input) {
        printf("[ERROR]\nInvalid interaction.");
      }
   }
-  #else /* _INLINED_REWRITE_ */
+  #else /* _LEGACY_REWRITE_ */
   u32 a_addr = a_addr_input;
   u64 a_ptrn_0 = a_addr<<2;
 
@@ -817,7 +818,7 @@ void rewrite(Net* net, u32 a_addr_input) {
        printf("[ERROR]\nInvalid interaction.");
      }
   }
-  #endif /*_INLINED_REWRITE_*/
+  #endif /* _LEGACY_REWRITE_ */
 }
 
 // Rewrites active pairs until none is left, reducing the graph to normal form
