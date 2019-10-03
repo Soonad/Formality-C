@@ -6,13 +6,17 @@
 #define u32 uint32_t 
 #define u64 uint64_t 
 
-const u32 PTR = 0;
-const u32 NUM = 1;
+enum {
+  PTR,
+  NUM,
+};
 
-const u32 NOD = 0;
-const u32 OP1 = 1;
-const u32 OP2 = 2;
-const u32 ITE = 3;
+enum {
+  NOD,
+  OP1,
+  OP2,
+  ITE,
+};
 
 u64 Pointer(u32 addr, u32 port) {
   return (u64)((addr << 2) + (port & 3));
