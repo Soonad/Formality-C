@@ -18,6 +18,25 @@ enum {
   ITE,
 };
 
+enum {
+  ADD,
+  SUB,
+  MUL,
+  DIV,
+  MOD,
+  POW,
+  INV,
+  AND,
+  BOR,
+  XOR,
+  NOT,
+  SHR,
+  SHL,
+  GTR,
+  LES,
+  EQL,
+};
+
 u64 Pointer(u32 addr, u32 port) {
   return (u64)((addr << 2) + (port & 3));
 }
@@ -178,22 +197,22 @@ void rewrite(Net* net, u32 a_addr) {
       u32 snd = numb_of(enter_port(net, Pointer(a_addr, 1)));
       u64 res;
       switch (a_kind) {
-        case  0: res = Numeric(fst + snd); break;
-        case  1: res = Numeric(fst - snd); break;
-        case  2: res = Numeric(fst * snd); break;
-        case  3: res = Numeric(fst / snd); break;
-        case  4: res = Numeric(fst % snd); break;
-        case  5: res = Numeric((u32)(pow((float)fst, (float)snd))); break;
-        case  6: res = Numeric((u32)(pow((float)fst, ((float)snd / pow(2.0,32.0))))); break;
-        case  7: res = Numeric(fst & snd); break;
-        case  8: res = Numeric(fst | snd); break;
-        case  9: res = Numeric(fst ^ snd); break;
-        case 10: res = Numeric(~snd); break;
-        case 11: res = Numeric(fst >> snd); break;
-        case 12: res = Numeric(fst << snd); break;
-        case 13: res = Numeric(fst > snd ? 1 : 0); break;
-        case 14: res = Numeric(fst < snd ? 1 : 0); break;
-        case 15: res = Numeric(fst == snd ? 1 : 0); break;
+        case ADD: res = Numeric(fst + snd); break;
+        case SUB: res = Numeric(fst - snd); break;
+        case MUL: res = Numeric(fst * snd); break;
+        case DIV: res = Numeric(fst / snd); break;
+        case MOD: res = Numeric(fst % snd); break;
+        case POW: res = Numeric((u32)(pow((float)fst, (float)snd))); break;
+        case INV: res = Numeric((u32)(pow((float)fst, ((float)snd / pow(2.0,32.0))))); break;
+        case AND: res = Numeric(fst & snd); break;
+        case BOR: res = Numeric(fst | snd); break;
+        case XOR: res = Numeric(fst ^ snd); break;
+        case NOT: res = Numeric(~snd); break;
+        case SHR: res = Numeric(fst >> snd); break;
+        case SHL: res = Numeric(fst << snd); break;
+        case GTR: res = Numeric(fst > snd ? 1 : 0); break;
+        case LES: res = Numeric(fst < snd ? 1 : 0); break;
+        case EQL: res = Numeric(fst == snd ? 1 : 0); break;
         default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
       }
       link_ports(net, dst, res);
