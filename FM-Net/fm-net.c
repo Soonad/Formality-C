@@ -304,11 +304,11 @@ void rewrite(Net* net, u32 a_addr) {
     
     // Permutations
     } else if (a_type == OP1 && b_type == NOD) {
-      return rewrite(net, b_addr);
+      rewrite(net, b_addr);
     } else if (a_type == OP2 && b_type == NOD) {
-      return rewrite(net, b_addr);
+      rewrite(net, b_addr);
     } else if (a_type == ITE && b_type == NOD) {
-      return rewrite(net, b_addr);
+      rewrite(net, b_addr);
 
     // InvalidInteraction
     } else {
