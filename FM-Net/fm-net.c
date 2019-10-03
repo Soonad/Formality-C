@@ -106,7 +106,7 @@ u64 get_port(Net* net, u32 addr, u32 slot) {
 }
 
 void set_type(Net* net, u32 addr, u32 type) {
-  net->nodes[addr * 4 + 3] = (net->nodes[addr * 4 + 3] & ~0b111000) | (type << 3);
+  net->nodes[addr * 4 + 3] = (net->nodes[addr * 4 + 3] & ~(7 << 3)) | (type << 3);
 }
 
 u32 get_type(Net* net, u32 addr) {
