@@ -26,7 +26,6 @@ enum {
   DIV,
   MOD,
   POW,
-  INV,
   AND,
   BOR,
   XOR,
@@ -36,6 +35,14 @@ enum {
   GTR,
   LES,
   EQL,
+  FADD,
+  FSUB,
+  FMUL,
+  FDIV,
+  FMOD,
+  FPOW,
+  ITOF,
+  FTOI,
 };
 
 u64 Pointer(u32 addr, u32 port) {
@@ -193,30 +200,39 @@ void rewrite(Net* net, u32 a_addr) {
 
     // UnaryOperation
     if (a_type == OP1) {
-      u64 dst = enter_port(net, Pointer(a_addr, 2));
-      u32 fst = numb_of(b_ptrn);
-      u32 snd = numb_of(enter_port(net, Pointer(a_addr, 1)));
-      u64 res;
+      union {uint32_t i; float f;} fst, snd, res;
+      u64 dst;
+
+      dst = enter_port(net, Pointer(a_addr, 2));
+      fst.i = numb_of(b_ptrn);
+      snd.i = numb_of(enter_port(net, Pointer(a_addr, 1)));
       switch (a_kind) {
-        case ADD: res = Numeric(fst + snd); break;
-        case SUB: res = Numeric(fst - snd); break;
-        case MUL: res = Numeric(fst * snd); break;
-        case DIV: res = Numeric(fst / snd); break;
-        case MOD: res = Numeric(fst % snd); break;
-        case POW: res = Numeric((u32)(pow((float)fst, (float)snd))); break;
-        case INV: res = Numeric((u32)(pow((float)fst, ((float)snd / pow(2.0,32.0))))); break;
-        case AND: res = Numeric(fst & snd); break;
-        case BOR: res = Numeric(fst | snd); break;
-        case XOR: res = Numeric(fst ^ snd); break;
-        case NOT: res = Numeric(~snd); break;
-        case SHR: res = Numeric(fst >> snd); break;
-        case SHL: res = Numeric(fst << snd); break;
-        case GTR: res = Numeric(fst > snd); break;
-        case LES: res = Numeric(fst < snd); break;
-        case EQL: res = Numeric(fst == snd); break;
-        default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
+        case ADD: res.i = fst.i + snd.i; break;
+        case SUB: res.i = fst.i - snd.i; break;
+        case MUL: res.i = fst.i * snd.i; break;
+        case DIV: res.i = fst.i / snd.i; break;
+        case MOD: res.i = fst.i % snd.i; break;
+        case POW: res.i = pow((float)fst.i, (float)snd.i); break;
+        case AND: res.i = fst.i & snd.i; break;
+        case BOR: res.i = fst.i | snd.i; break;
+        case XOR: res.i = fst.i ^ snd.i; break;
+        case NOT: res.i = ~snd.i; break;
+        case SHR: res.i = fst.i >> snd.i; break;
+        case SHL: res.i = fst.i << snd.i; break;
+        case GTR: res.i = fst.i > snd.i; break;
+        case LES: res.i = fst.i < snd.i; break;
+        case EQL: res.i = fst.i == snd.i; break;
+        case FADD: res.f = fst.f + snd.f; break;
+        case FSUB: res.f = fst.f - snd.f; break;
+        case FMUL: res.f = fst.f * snd.f; break;
+        case FDIV: res.f = fst.f / snd.f; break;
+        case FMOD: res.f = fmodf(fst.f, snd.f); break;
+        case FPOW: res.f = powf(fst.f, snd.f); break;
+        case ITOF: res.f = fst.i; break;
+        case FTOI: res.i = fst.f; break;
+        default: res.i = 0; printf("[ERROR]\nInvalid interaction."); break;
       }
-      link_ports(net, dst, res);
+      link_ports(net, dst, Numeric(res.i));
       unlink_port(net, Pointer(a_addr, 0));
       unlink_port(net, Pointer(a_addr, 2));
       free_node(net, a_addr);
