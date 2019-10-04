@@ -210,9 +210,9 @@ void rewrite(Net* net, u32 a_addr) {
         case NOT: res = Numeric(~snd); break;
         case SHR: res = Numeric(fst >> snd); break;
         case SHL: res = Numeric(fst << snd); break;
-        case GTR: res = Numeric(fst > snd ? 1 : 0); break;
-        case LES: res = Numeric(fst < snd ? 1 : 0); break;
-        case EQL: res = Numeric(fst == snd ? 1 : 0); break;
+        case GTR: res = Numeric(fst > snd); break;
+        case LES: res = Numeric(fst < snd); break;
+        case EQL: res = Numeric(fst == snd); break;
         default: res = 0; printf("[ERROR]\nInvalid interaction."); break;
       }
       link_ports(net, dst, res);
