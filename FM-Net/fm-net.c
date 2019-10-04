@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define u32 uint32_t 
-#define u64 uint64_t 
+typedef uint32_t u32;
+typedef uint64_t u64;
 
 enum {
   PTR,
