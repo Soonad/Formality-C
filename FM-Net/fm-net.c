@@ -190,6 +190,16 @@ void unlink_port(Net* net, u64 a_ptrn) {
   }
 }
 
+static uint32_t powi(uint32_t fst, uint32_t snd) {
+  uint32_t res;
+
+  for (res = 1; snd; snd >>= 1, fst *= fst) {
+    if (snd & 1)
+      res *= fst;
+  }
+  return res;
+}
+
 // Rewrites an active pair
 void rewrite(Net* net, u32 a_addr) {
   u64 b_ptrn = get_port(net, a_addr, 0);
@@ -212,7 +222,7 @@ void rewrite(Net* net, u32 a_addr) {
         case MUL: res.i = fst.i * snd.i; break;
         case DIV: res.i = fst.i / snd.i; break;
         case MOD: res.i = fst.i % snd.i; break;
-        case POW: res.i = pow((float)fst.i, (float)snd.i); break;
+        case POW: res.i = powi(fst.i, snd.i); break;
         case AND: res.i = fst.i & snd.i; break;
         case BOR: res.i = fst.i | snd.i; break;
         case XOR: res.i = fst.i ^ snd.i; break;
