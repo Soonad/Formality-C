@@ -430,7 +430,7 @@ void print_net(Net* net) {
   }
 }
 
-int main () {
+int main(void) {
   Net net;
   net.nodes = malloc(sizeof(u32) * 200000000);
   net.redex = malloc(sizeof(u32) * 10000000);
